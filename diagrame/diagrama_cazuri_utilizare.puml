@@ -1,0 +1,80 @@
+@startuml diagrama_cazuri_utilizare
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam linetype ortho
+
+title Diagrama Cazuri de Utilizare
+
+actor "Admin" as Admin
+actor "Auditor" as Auditor  
+actor "Viewer" as Viewer
+actor "Agent" as Agent
+
+rectangle "Platforma BitTrail" {
+    
+    rectangle "Autentificare" {
+        usecase "Login" as UC1
+        usecase "Logout" as UC2
+    }
+    
+    rectangle "Gestiune Servere" {
+        usecase "Adauga Server" as UC3
+        usecase "Vizualizeaza Servere" as UC4
+        usecase "Sterge Server" as UC5
+        usecase "Genereaza Token" as UC6
+    }
+    
+    rectangle "Gestiune Template" {
+        usecase "Import Template" as UC7
+        usecase "Vizualizeaza Template" as UC8
+    }
+    
+    rectangle "Executie Audit" {
+        usecase "Initiaza Audit" as UC9
+        usecase "Incarca Evidenta" as UC10
+        usecase "Aproba Task" as UC11
+        usecase "Vizualizeaza Rezultate" as UC12
+    }
+    
+    rectangle "Comunicare Agent" {
+        usecase "Inrolare" as UC13
+        usecase "Trimite Metrici" as UC14
+        usecase "Executa Verificari" as UC15
+    }
+}
+
+' Admin - acces complet
+Admin --> UC1
+Admin --> UC3
+Admin --> UC4
+Admin --> UC5
+Admin --> UC6
+Admin --> UC7
+Admin --> UC8
+Admin --> UC9
+Admin --> UC10
+Admin --> UC11
+Admin --> UC12
+
+' Auditor - audit si vizualizare
+Auditor --> UC1
+Auditor --> UC4
+Auditor --> UC8
+Auditor --> UC9
+Auditor --> UC10
+Auditor --> UC11
+Auditor --> UC12
+
+' Viewer - doar vizualizare
+Viewer --> UC1
+Viewer --> UC4
+Viewer --> UC8
+Viewer --> UC12
+
+' Agent - comunicare
+Agent --> UC13
+Agent --> UC14
+Agent --> UC15
+
+@enduml

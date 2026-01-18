@@ -1,0 +1,61 @@
+@startuml diagrama_componente
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam componentStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 40
+
+title Diagrama de Componente - Arhitectura Modulelor
+
+rectangle "Frontend (React)" as FE #LightBlue {
+    [Aplicatie SPA] as App
+    [Context Auth] as Ctx
+    [Client API] as ApiC
+    [Client WS] as WsC
+}
+
+rectangle "Backend (Express)" as BE #LightGreen {
+    [Server HTTP] as HTTP
+    [Middleware] as MW
+    [Rute API] as Routes
+    [Servicii] as Svc
+    [WebSocket] as WsSrv
+    [Prisma] as ORM
+}
+
+rectangle "Agent (Go)" as AG #LightYellow {
+    [CLI] as CLI
+    [Colector] as Col
+    [Executor] as Exec
+}
+
+database "PostgreSQL" as DB #LightGray
+
+' Layout orizontal
+FE -[hidden]right-> BE
+BE -[hidden]right-> AG
+
+' Conexiuni
+App --> Ctx
+App --> ApiC
+App --> WsC
+
+HTTP --> MW
+MW --> Routes
+Routes --> Svc
+Svc --> ORM
+WsSrv --> Svc
+
+ApiC --> HTTP : REST
+WsC --> WsSrv : WS
+
+ORM --> DB : TCP
+
+CLI --> Col
+CLI --> Exec
+Col --> HTTP : REST
+Exec --> HTTP : REST
+
+@enduml

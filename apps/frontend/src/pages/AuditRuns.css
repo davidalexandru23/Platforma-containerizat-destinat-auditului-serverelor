@@ -1,0 +1,19 @@
+.audits-table-wrapper {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.text-sm {
+    font-size: 0.75rem;
+}
+
+.link {
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+.link:hover {
+    text-decoration: underline;
+}

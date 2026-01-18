@@ -1,0 +1,105 @@
+@startuml diagrama_clase_audit
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 30
+
+title Diagrama de Clase - Obiecte Audit
+
+class AuditTemplate {
+    id: UUID
+    name: String
+    type: Enum
+    --
+    getVersions()
+}
+
+class TemplateVersion {
+    id: UUID
+    version: String
+    --
+    getControls()
+}
+
+class Control {
+    id: UUID
+    controlId: String
+    title: String
+    severity: Enum
+    --
+    getChecks()
+}
+
+class AutomatedCheck {
+    id: UUID
+    command: String
+    expectedResult: String
+    --
+    execute()
+}
+
+class ManualCheck {
+    id: UUID
+    instructions: String
+    evidenceRequired: Bool
+}
+
+class AuditRun {
+    id: UUID
+    status: Enum
+    startedAt: DateTime
+    scorePercent: Float
+    --
+    complete()
+}
+
+class CheckResult {
+    id: UUID
+    status: Enum
+    output: String
+}
+
+class ManualTask {
+    id: UUID
+    status: Enum
+    notes: String
+    --
+    approve()
+}
+
+class Evidence {
+    id: UUID
+    filePath: String
+    mimeType: String
+}
+
+class Server {
+    id: UUID
+    name: String
+    hostname: String
+    status: Enum
+}
+
+' Relatii - rand 1
+AuditTemplate "1" -- "*" TemplateVersion
+TemplateVersion "1" -- "*" Control
+
+' Relatii - rand 2
+Control "1" -- "*" AutomatedCheck
+Control "1" -- "*" ManualCheck
+
+' Relatii - rand 3
+AuditRun "*" -- "1" TemplateVersion
+AuditRun "*" -- "1" Server
+
+' Relatii - rand 4
+AuditRun "1" -- "*" CheckResult
+AuditRun "1" -- "*" ManualTask
+CheckResult "*" -- "1" AutomatedCheck
+ManualTask "*" -- "1" ManualCheck
+ManualTask "1" -- "*" Evidence
+
+@enduml

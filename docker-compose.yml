@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bittrail-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bittrail
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - bittrail-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: bittrail-backend
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bittrail?schema=public
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-key-change-in-production}
+      BACKEND_PORT: 3000
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bittrail-network
+    volumes:
+      - evidence_files:/app/evidence
+      - ./templates:/app/templates:ro
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: bittrail-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - bittrail-network
+
+  # Agent demo - pentru testare locala
+  agent-demo:
+    build:
+      context: ./apps/agent
+      dockerfile: Dockerfile
+    container_name: bittrail-agent-demo
+    environment:
+      BITTRAIL_SERVER: http://backend:3000
+    depends_on:
+      - backend
+    networks:
+      - bittrail-network
+    # Agentul real ruleaza pe host, nu in container
+
+volumes:
+  postgres_data:
+  evidence_files:
+
+
+networks:
+  bittrail-network:
+    driver: bridge
+    name: bittrail-network

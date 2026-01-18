@@ -1,0 +1,51 @@
+@startuml diagrama_desfasurare
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam linetype ortho
+skinparam nodesep 50
+
+title Diagrama de Desfasurare - Infrastructura Docker
+
+node "Host Docker" as Host {
+    
+    node "frontend:80" as FC #LightBlue {
+        [Nginx + React]
+    }
+    
+    node "backend:3000" as BC #LightGreen {
+        [Express + Prisma]
+    }
+    
+    node "postgres:5432" as PC #LightGray {
+        database "PostgreSQL"
+    }
+    
+    storage "postgres_data" as V1
+    storage "evidence_files" as V2
+}
+
+node "Server Monitorizat" as Target #LightYellow {
+    [Agent BitTrail]
+    file "config.yaml"
+}
+
+cloud "Internet" as Net
+
+' Layout
+FC -[hidden]right-> BC
+BC -[hidden]right-> PC
+
+' Conexiuni interne
+FC --> BC : HTTP
+BC --> PC : TCP
+PC --> V1 : mount
+BC --> V2 : mount
+
+' Conexiuni externe
+Net --> FC : HTTPS:443
+Net --> BC : HTTPS:3000
+Target --> Net : HTTPS
+Net --> BC
+
+@enduml

@@ -1,0 +1,96 @@
+// Middleware pentru error handling centralizat
+const errorHandler = (err, req, res, next) => {
+    console.error('Error:', err);
+
+    // Erori de validare
+    if (err.name === 'ValidationError' || err.type === 'validation') {
+        return res.status(400).json({
+            error: 'Validation Error',
+            message: err.message,
+            details: err.details || [],
+        });
+    }
+
+    // Erori Prisma
+    if (err.code === 'P2002') {
+        return res.status(409).json({
+            error: 'Conflict',
+            message: 'Resursa exista deja',
+        });
+    }
+
+    if (err.code === 'P2025') {
+        return res.status(404).json({
+            error: 'Not Found',
+            message: 'Resursa nu exista',
+        });
+    }
+
+    // Erori custom
+    if (err.statusCode) {
+        return res.status(err.statusCode).json({
+            error: err.name || 'Error',
+            message: err.message,
+        });
+    }
+
+    // Eroare generica
+    res.status(500).json({
+        error: 'Internal Server Error',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Eroare interna',
+    });
+};
+
+// Clasa pentru erori custom
+class AppError extends Error {
+    constructor(message, statusCode) {
+        super(message);
+        this.statusCode = statusCode;
+        this.name = 'AppError';
+    }
+}
+
+class NotFoundError extends AppError {
+    constructor(message = 'Resursa nu exista') {
+        super(message, 404);
+        this.name = 'NotFoundError';
+    }
+}
+
+class UnauthorizedError extends AppError {
+    constructor(message = 'Neautorizat') {
+        super(message, 401);
+        this.name = 'UnauthorizedError';
+    }
+}
+
+class ForbiddenError extends AppError {
+    constructor(message = 'Acces interzis') {
+        super(message, 403);
+        this.name = 'ForbiddenError';
+    }
+}
+
+class ConflictError extends AppError {
+    constructor(message = 'Conflict') {
+        super(message, 409);
+        this.name = 'ConflictError';
+    }
+}
+
+class BadRequestError extends AppError {
+    constructor(message = 'Request invalid') {
+        super(message, 400);
+        this.name = 'BadRequestError';
+    }
+}
+
+module.exports = {
+    errorHandler,
+    AppError,
+    NotFoundError,
+    UnauthorizedError,
+    ForbiddenError,
+    ConflictError,
+    BadRequestError,
+};

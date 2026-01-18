@@ -1,0 +1,54 @@
+@startuml diagrama_secventa_audit
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 150
+
+title Diagrama de Secventa - Flux Audit
+
+participant "Auditor" as A
+participant "Frontend" as F
+participant "Backend" as B
+participant "Database" as D
+participant "Agent" as G
+
+== Initiere ==
+A -> F : Selecteaza audit
+F -> B : POST /audit/run
+B -> D : INSERT AuditRun
+D --> B : auditRunId
+B --> F : 201 {auditRunId}
+F --> A : Afiseaza progres
+
+== Verificari Automate ==
+G -> B : GET /audit/pending
+B -> D : SELECT checks
+D --> B : lista checks
+B --> G : checks[]
+
+G -> G : Executa comenzi
+G -> B : POST /audit/results
+B -> D : INSERT CheckResult
+B --> G : 200 OK
+
+== Verificari Manuale ==
+A -> F : Incarca evidenta
+F -> B : POST /evidence
+B -> D : INSERT Evidence
+B --> F : 200 OK
+
+A -> F : Aproba task
+F -> B : POST /approve
+B -> D : UPDATE ManualTask
+B --> F : 200 OK
+
+== Finalizare ==
+A -> F : Finalizeaza
+F -> B : POST /complete
+B -> B : Calcul scor
+B -> D : UPDATE AuditRun
+B --> F : {score}
+F --> A : Raport final
+
+@enduml

@@ -1,0 +1,21 @@
+[Unit]
+Description=BitTrail Agent - Server Monitoring and Audit
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bittrail-agent run
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bittrail-agent
+
+# Securitate
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+ReadWritePaths=/etc/bittrail-agent
+
+[Install]
+WantedBy=multi-user.target

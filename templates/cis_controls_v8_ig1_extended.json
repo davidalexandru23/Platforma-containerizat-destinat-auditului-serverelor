@@ -1,0 +1,1111 @@
+{
+    "$schema": "bittrail-template@1.0",
+    "metadata": {
+        "name": "CIS Controls v8 Implementation Group 1 (Extended Baseline)",
+        "description": "Template de audit inspirat de CIS Controls v8 IG1, extins cu controale operationale uzuale pentru servere Linux si infrastructura.",
+        "version": "1.1.0",
+        "type": "CIS_CONTROLS",
+        "author": "BitTrail Platform",
+        "createdAt": "2024-01-01T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "1.1",
+            "title": "Inventar active hardware enterprise",
+            "category": "CIS Control 1: Inventory and Control of Enterprise Assets",
+            "severity": "HIGH",
+            "rationale": "Este imposibil sa protejezi ceea ce nu stii ca exista. Un inventar actualizat e esential.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "1.1.M1",
+                    "title": "Documenteaza inventarul hardware",
+                    "instructions": "Furnizeaza documentatie cu lista tuturor activelor hardware (servere, workstations, echipamente retea).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": false,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "1.2",
+            "title": "Inventar storage si mount points",
+            "category": "CIS Control 1: Inventory and Control of Enterprise Assets",
+            "severity": "MEDIUM",
+            "rationale": "Discurile si mount-urile neasteptate pot ascunde date sensibile sau configuratii gresite.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.2.1",
+                    "title": "Lista block devices si mount points",
+                    "command": "lsblk -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null | wc -l",
+                    "expectedResult": "3",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_GE",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "lsblk nu a returnat output valid (posibil lipsesc permisiuni sau utilitar).",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "1.2.M1",
+                    "title": "Confirma storage autorizat",
+                    "instructions": "Ataseaza dovada ca toate volumele si mount-urile sunt autorizate (ex: lista aprobata, owner, scop).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "1.3",
+            "title": "Inventar interfete de retea",
+            "category": "CIS Control 1: Inventory and Control of Enterprise Assets",
+            "severity": "MEDIUM",
+            "rationale": "Interfetele active si adresele pot indica expunere neasteptata sau configuratii gresite.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.3.1",
+                    "title": "Lista interfete (ip -br link)",
+                    "command": "ip -br link 2>/dev/null | wc -l",
+                    "expectedResult": "1",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_GE",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "2.1",
+            "title": "Inventar software autorizat",
+            "category": "CIS Control 2: Inventory and Control of Software Assets",
+            "severity": "HIGH",
+            "rationale": "Software neautorizat poate contine vulnerabilitati sau malware.",
+            "automatedChecks": [
+                {
+                    "checkId": "2.1.1",
+                    "title": "Lista pachete instalate",
+                    "command": "dpkg -l | wc -l",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "2.1.M1",
+                    "title": "Documenteaza lista software autorizat",
+                    "instructions": "Furnizeaza lista software autorizat si compara cu cel instalat pe server.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "2.2",
+            "title": "Update-uri OS disponibile controlat",
+            "category": "CIS Control 2: Inventory and Control of Software Assets",
+            "severity": "HIGH",
+            "rationale": "Pachetele neactualizate cresc riscul de exploatare.",
+            "automatedChecks": [
+                {
+                    "checkId": "2.2.1",
+                    "title": "Numar update-uri disponibile",
+                    "command": "apt list --upgradable 2>/dev/null | tail -n +2 | wc -l",
+                    "expectedResult": "10",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_LE",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Exista prea multe update-uri disponibile. Planifica patching.",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "2.2.M1",
+                    "title": "Politica patching si fereastra de mentenanta",
+                    "instructions": "Ataseaza politica de patching (frecventa, responsabil, proces de aprobare, fereastra).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "3.1",
+            "title": "Protectie date - identificare date sensibile",
+            "category": "CIS Control 3: Data Protection",
+            "severity": "CRITICAL",
+            "rationale": "Protejarea datelor sensibile previne breach-uri costisitoare.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "3.1.M1",
+                    "title": "Clasificare date",
+                    "instructions": "Documenteaza cum sunt clasificate datele pe acest server (public, intern, confidential, restrictionat).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "3.2",
+            "title": "Permisiuni home directories (fara access larg)",
+            "category": "CIS Control 3: Data Protection",
+            "severity": "HIGH",
+            "rationale": "Permisiunile largi in /home pot expune date sensibile intre utilizatori.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.2.1",
+                    "title": "Directoare /home cu permisiuni pentru others",
+                    "command": "find /home -maxdepth 1 -mindepth 1 -type d -perm -0007 2>/dev/null | wc -l",
+                    "expectedResult": "0",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_EQ",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Exista home directories cu permisiuni largi (others).",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.3",
+            "title": "Detectie potentiale chei private expuse",
+            "category": "CIS Control 3: Data Protection",
+            "severity": "CRITICAL",
+            "rationale": "Cheile private expuse duc direct la compromiterea autentificarii si a criptarii.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.3.1",
+                    "title": "Cauta 'BEGIN PRIVATE KEY' in /etc",
+                    "command": "grep -R \"BEGIN PRIVATE KEY\" /etc 2>/dev/null | head -1 | wc -l",
+                    "expectedResult": "0",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_EQ",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "S-a gasit continut de tip private key in /etc. Verifica expunerea si permisiunile.",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "3.3.M1",
+                    "title": "Politica management chei si secrete",
+                    "instructions": "Ataseaza politica de management pentru chei, certificate si secrete (stocare, rotatie, acces).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "3.4",
+            "title": "Restrictionare accesare date sensibile",
+            "category": "CIS Control 3: Data Protection",
+            "severity": "HIGH",
+            "rationale": "Accesul la date sensibile trebuie limitat strict.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.4.1",
+                    "title": "Verifica fisiere cu permisiuni largi",
+                    "command": "find /home -type f -perm -0007 2>/dev/null | head -10 | wc -l",
+                    "expectedResult": "0",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.1",
+            "title": "Configurare securizata enterprise",
+            "category": "CIS Control 4: Secure Configuration",
+            "severity": "HIGH",
+            "rationale": "Configuratii default sunt adesea insecure.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.1.1",
+                    "title": "Verifica SSH PermitRootLogin",
+                    "command": "sshd -T 2>/dev/null | grep -i permitrootlogin || grep -i permitrootlogin /etc/ssh/sshd_config",
+                    "expectedResult": "permitrootlogin no",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "4.1.2",
+                    "title": "Verifica SSH PasswordAuthentication",
+                    "command": "sshd -T 2>/dev/null | grep -i passwordauthentication",
+                    "expectedResult": "passwordauthentication no",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.2",
+            "title": "Firewall baseline (default deny inbound)",
+            "category": "CIS Control 4: Secure Configuration",
+            "severity": "HIGH",
+            "rationale": "Politica default deny inbound reduce expunerea neintentionata.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.2.1",
+                    "title": "UFW default deny incoming",
+                    "command": "ufw status verbose 2>/dev/null | grep -i \"Default: deny (incoming)\" | wc -l",
+                    "expectedResult": "1",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_EQ",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Nu este setata politica default deny incoming in UFW (sau UFW nu este configurat).",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.3",
+            "title": "AppArmor activ",
+            "category": "CIS Control 4: Secure Configuration",
+            "severity": "MEDIUM",
+            "rationale": "Mandatory Access Control reduce impactul compromisului aplicatiilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.3.1",
+                    "title": "Verifica apparmor activ",
+                    "command": "systemctl is-active apparmor 2>/dev/null || echo 'NOT_ACTIVE'",
+                    "expectedResult": "active",
+                    "checkType": "COMMAND",
+                    "comparison": "EQUALS",
+                    "normalize": [
+                        "TRIM",
+                        "LOWER"
+                    ],
+                    "onFailMessage": "AppArmor nu este activ.",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.7",
+            "title": "Management conturi default",
+            "category": "CIS Control 4: Secure Configuration",
+            "severity": "MEDIUM",
+            "rationale": "Conturile default sunt target frecvent pentru atacatori.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.7.1",
+                    "title": "Verifica conturi sistem cu shell",
+                    "command": "awk -F: '($1!=\"root\" && $3<1000 && $7!=\"/usr/sbin/nologin\" && $7!=\"/bin/false\") {print $1}' /etc/passwd | wc -l",
+                    "expectedResult": "0",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.1",
+            "title": "Inventar conturi",
+            "category": "CIS Control 5: Account Management",
+            "severity": "HIGH",
+            "rationale": "Conturile orfane sau nefolosite sunt un risc de securitate.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.1.1",
+                    "title": "Lista useri cu UID >= 1000",
+                    "command": "awk -F: '$3>=1000 {print $1}' /etc/passwd",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "5.1.M1",
+                    "title": "Revizuieste conturile active",
+                    "instructions": "Verifica ca toate conturile active apartin angajatilor actuali.",
+                    "evidenceSpec": {
+                        "allowUpload": false,
+                        "allowLink": false,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "5.2",
+            "title": "Privilegii minime",
+            "category": "CIS Control 5: Account Management",
+            "severity": "HIGH",
+            "rationale": "Utilizatorii trebuie sa aiba doar privilegiile necesare.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.1",
+                    "title": "Numar useri in sudoers",
+                    "command": "grep -E '^[^#].*ALL=' /etc/sudoers /etc/sudoers.d/* 2>/dev/null | wc -l",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "5.2.M1",
+                    "title": "Revizuieste privilegii sudo",
+                    "instructions": "Verifica ca doar utilizatorii necesari au privilegiile sudo.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": false,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "5.3",
+            "title": "Fara NOPASSWD in sudoers",
+            "category": "CIS Control 5: Account Management",
+            "severity": "HIGH",
+            "rationale": "NOPASSWD elimina un control important si creste riscul de abuz.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.3.1",
+                    "title": "Detectie NOPASSWD",
+                    "command": "grep -R \"NOPASSWD\" /etc/sudoers /etc/sudoers.d/* 2>/dev/null | wc -l",
+                    "expectedResult": "0",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_EQ",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Exista intrari NOPASSWD in sudoers. Revizuieste si elimina unde nu e justificat."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.4",
+            "title": "Politica expirare parole (PASS_MAX_DAYS)",
+            "category": "CIS Control 5: Account Management",
+            "severity": "MEDIUM",
+            "rationale": "Expirarea parolelor reduce riscul de credential reuse pe termen lung in unele politici.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.4.1",
+                    "title": "PASS_MAX_DAYS <= 365",
+                    "command": "grep -E \"^PASS_MAX_DAYS\" /etc/login.defs 2>/dev/null | awk '{print $2}'",
+                    "expectedResult": "365",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_LE",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "PASS_MAX_DAYS este prea mare sau nu este setat."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.1",
+            "title": "Colectare log-uri",
+            "category": "CIS Control 6: Access Control Management",
+            "severity": "HIGH",
+            "rationale": "Log-urile sunt esentiale pentru detectia si investigarea incidentelor.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.1.1",
+                    "title": "Verifica rsyslog activ",
+                    "command": "systemctl is-active rsyslog 2>/dev/null || echo 'NOT_ACTIVE'",
+                    "expectedResult": "active",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "6.1.2",
+                    "title": "Verifica journald activ",
+                    "command": "systemctl is-active systemd-journald 2>/dev/null",
+                    "expectedResult": "active",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.2",
+            "title": "Sincronizare timp (NTP) activa",
+            "category": "CIS Control 6: Access Control Management",
+            "severity": "HIGH",
+            "rationale": "Fara timp corect, corelarea log-urilor si investigatiile devin nesigure.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.2.1",
+                    "title": "Verifica NTP sync activ",
+                    "command": "timedatectl show -p NTPSynchronized --value 2>/dev/null || echo 'UNKNOWN'",
+                    "expectedResult": "yes",
+                    "checkType": "COMMAND",
+                    "comparison": "EQUALS",
+                    "normalize": [
+                        "TRIM",
+                        "LOWER"
+                    ],
+                    "onFailMessage": "NTP nu este sincronizat (NTPSynchronized != yes).",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.3",
+            "title": "Permisiuni log-uri (fara world-writable)",
+            "category": "CIS Control 6: Access Control Management",
+            "severity": "HIGH",
+            "rationale": "Log-urile world-writable pot fi modificate, afectand integritatea investigatiilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.3.1",
+                    "title": "Fisiere in /var/log cu permisiuni de scriere pentru others",
+                    "command": "find /var/log -type f -perm -0002 2>/dev/null | head -10 | wc -l",
+                    "expectedResult": "0",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_EQ",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Exista log-uri world-writable in /var/log."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "7.1",
+            "title": "Protectie email si browser",
+            "category": "CIS Control 7: Continuous Vulnerability Management",
+            "severity": "MEDIUM",
+            "rationale": "Email si browser-ul sunt vectori principali de atac.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "7.1.M1",
+                    "title": "Politica acces email/browser",
+                    "instructions": "Documenteaza politica de utilizare email si browser pe servere.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "7.2",
+            "title": "Scanare vulnerabilitati (tooling minim)",
+            "category": "CIS Control 7: Continuous Vulnerability Management",
+            "severity": "MEDIUM",
+            "rationale": "Scanarea regulata descopera probleme inainte de exploatare.",
+            "automatedChecks": [
+                {
+                    "checkId": "7.2.1",
+                    "title": "Verifica lynis instalat",
+                    "command": "dpkg -s lynis 2>/dev/null | grep -i status || echo 'NOT_INSTALLED'",
+                    "expectedResult": "install ok installed",
+                    "checkType": "COMMAND",
+                    "comparison": "CONTAINS",
+                    "normalize": [
+                        "TRIM",
+                        "LOWER"
+                    ],
+                    "onFailMessage": "Lynis nu este instalat (optional).",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "7.2.M1",
+                    "title": "Evidenta scanare vulnerabilitati",
+                    "instructions": "Ataseaza ultimul raport de scanare (ex: Nessus/OpenVAS/Lynis) si planul de remediere.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "7.3",
+            "title": "Remedierea automata a vulnerabilitatilor OS",
+            "category": "CIS Control 7: Continuous Vulnerability Management",
+            "severity": "CRITICAL",
+            "rationale": "Vulnerabilitatile nepatched sunt exploatate frecvent.",
+            "automatedChecks": [
+                {
+                    "checkId": "7.3.1",
+                    "title": "Verifica unattended-upgrades instalat",
+                    "command": "dpkg -s unattended-upgrades 2>/dev/null | grep -i status || echo 'NOT_INSTALLED'",
+                    "expectedResult": "install ok installed",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "7.3.2",
+                    "title": "Verifica update-uri disponibile",
+                    "command": "apt list --upgradable 2>/dev/null | tail -n +2 | wc -l",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "8.1",
+            "title": "Audit log activat",
+            "category": "CIS Control 8: Audit Log Management",
+            "severity": "HIGH",
+            "rationale": "Audit logs furnizeaza trail pentru investigatii.",
+            "automatedChecks": [
+                {
+                    "checkId": "8.1.1",
+                    "title": "Verifica auditd instalat si activ",
+                    "command": "systemctl is-active auditd 2>/dev/null || echo 'NOT_ACTIVE'",
+                    "expectedResult": "active",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "8.2",
+            "title": "Journald persistent (log-uri pe disk)",
+            "category": "CIS Control 8: Audit Log Management",
+            "severity": "MEDIUM",
+            "rationale": "Fara log-uri persistente, pierzi istoric dupa reboot si afectezi investigatia.",
+            "automatedChecks": [
+                {
+                    "checkId": "8.2.1",
+                    "title": "Exista /var/log/journal",
+                    "command": "test -d /var/log/journal && echo YES || echo NO",
+                    "expectedResult": "YES",
+                    "checkType": "COMMAND",
+                    "comparison": "EQUALS",
+                    "normalize": [
+                        "TRIM",
+                        "UPPER"
+                    ],
+                    "onFailMessage": "Nu exista /var/log/journal. Configureaza journald persistent."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "8.5",
+            "title": "Retentie log-uri",
+            "category": "CIS Control 8: Audit Log Management",
+            "severity": "MEDIUM",
+            "rationale": "Log-urile trebuie pastrate pentru conformitate si investigatii.",
+            "automatedChecks": [
+                {
+                    "checkId": "8.5.1",
+                    "title": "Verifica logrotate configurat",
+                    "command": "ls /etc/logrotate.d/ | wc -l",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "8.5.M1",
+                    "title": "Politica retentie log-uri",
+                    "instructions": "Documenteaza politica de retentie a log-urilor (minim 90 zile recomandat).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "10.1",
+            "title": "Antimalware instalat",
+            "category": "CIS Control 10: Malware Defenses",
+            "severity": "HIGH",
+            "rationale": "Protectia antimalware detecteaza si previne infectii.",
+            "automatedChecks": [
+                {
+                    "checkId": "10.1.1",
+                    "title": "Verifica clamav instalat",
+                    "command": "dpkg -s clamav 2>/dev/null | grep -i status || echo 'NOT_INSTALLED'",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "10.1.M1",
+                    "title": "Documenteaza solutia antimalware",
+                    "instructions": "Descrie solutia antimalware folosita (poate fi la nivel de infrastructura).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "10.2",
+            "title": "Fail2ban activ (protectie brute-force)",
+            "category": "CIS Control 10: Malware Defenses",
+            "severity": "MEDIUM",
+            "rationale": "Reduce brute-force pe servicii expuse (ex: SSH).",
+            "automatedChecks": [
+                {
+                    "checkId": "10.2.1",
+                    "title": "Verifica fail2ban activ",
+                    "command": "systemctl is-active fail2ban 2>/dev/null || echo 'NOT_ACTIVE'",
+                    "expectedResult": "active",
+                    "checkType": "COMMAND",
+                    "comparison": "EQUALS",
+                    "normalize": [
+                        "TRIM",
+                        "LOWER"
+                    ],
+                    "onFailMessage": "Fail2ban nu este activ (optional)."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "11.1",
+            "title": "Backup date",
+            "category": "CIS Control 11: Data Recovery",
+            "severity": "CRITICAL",
+            "rationale": "Backup-urile sunt esentiale pentru recuperarea din incidente.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "11.1.M1",
+                    "title": "Documenteaza strategia de backup",
+                    "instructions": "Furnizeaza documentatie despre strategia de backup (frecventa, locatie, testare).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": false,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "11.2",
+            "title": "Testare restore backup",
+            "category": "CIS Control 11: Data Recovery",
+            "severity": "HIGH",
+            "rationale": "Un backup care nu a fost testat nu e de incredere.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "11.2.M1",
+                    "title": "Evidenta ultima testare restore",
+                    "instructions": "Furnizeaza evidenta ultimei testari de restore backup.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "11.3",
+            "title": "Backup configurat si restore testat (hybrid)",
+            "category": "CIS Control 11: Data Recovery",
+            "severity": "CRITICAL",
+            "rationale": "Backup fara restore testat nu e o garantie reala de recuperare.",
+            "automatedChecks": [
+                {
+                    "checkId": "11.3.1",
+                    "title": "Detectie job backup (cron: rsync/backup)",
+                    "command": "crontab -l 2>/dev/null | grep -iE '(rsync|backup)' | wc -l",
+                    "expectedResult": "1",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_GE",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Nu am gasit job de backup in crontab pentru userul curent."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "11.3.M1",
+                    "title": "Evidenta restore",
+                    "instructions": "Ataseaza dovada ultimei testari de restore (data, sistem, rezultat, timp).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "12.1",
+            "title": "Firewall perimetral",
+            "category": "CIS Control 12: Network Infrastructure Management",
+            "severity": "CRITICAL",
+            "rationale": "Firewall-ul controleaza traficul si reduce suprafata de atac.",
+            "automatedChecks": [
+                {
+                    "checkId": "12.1.1",
+                    "title": "Verifica ufw activ",
+                    "command": "ufw status 2>/dev/null | head -1",
+                    "expectedResult": "Status: active",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "12.2",
+            "title": "Expunere porturi (lista porturi listening)",
+            "category": "CIS Control 12: Network Infrastructure Management",
+            "severity": "MEDIUM",
+            "rationale": "Suprafata de atac creste cu fiecare port expus inutil.",
+            "automatedChecks": [
+                {
+                    "checkId": "12.2.1",
+                    "title": "Numar porturi TCP in LISTEN",
+                    "command": "ss -lnt 2>/dev/null | tail -n +2 | wc -l",
+                    "expectedResult": "20",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_LE",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Prea multe porturi listening. Revizuieste expunerea si firewall-ul.",
+                    "platformScope": [
+                        "debian",
+                        "ubuntu"
+                    ]
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "12.2.M1",
+                    "title": "Justificare porturi necesare",
+                    "instructions": "Ataseaza lista porturilor necesare (service, owner, motiv, expunere publica/privata).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "12.3",
+            "title": "Reguli acces administrare (SSH) documentate",
+            "category": "CIS Control 12: Network Infrastructure Management",
+            "severity": "HIGH",
+            "rationale": "Accesul administrativ trebuie limitat pe surse si justificat.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "12.3.M1",
+                    "title": "Whitelist IP/VPN pentru administrare",
+                    "instructions": "Documenteaza de unde se permite administrarea (VPN, IP-uri, bastion) si ataseaza dovada (config, diagrama, reguli).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "13.1",
+            "title": "Monitorizare si detectie",
+            "category": "CIS Control 13: Network Monitoring and Defense",
+            "severity": "HIGH",
+            "rationale": "Detectia timpurie reduce impactul incidentelor.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "13.1.M1",
+                    "title": "Sistem de monitorizare",
+                    "instructions": "Documenteaza sistemul de monitorizare folosit (IDS/IPS, SIEM, etc).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "13.2",
+            "title": "Agent de monitorizare activ (node_exporter sau echivalent)",
+            "category": "CIS Control 13: Network Monitoring and Defense",
+            "severity": "MEDIUM",
+            "rationale": "Fara telemetrie de baza nu poti detecta degradari si incidente.",
+            "automatedChecks": [
+                {
+                    "checkId": "13.2.1",
+                    "title": "Verifica node_exporter activ",
+                    "command": "systemctl is-active node_exporter 2>/dev/null || echo 'NOT_ACTIVE'",
+                    "expectedResult": "active",
+                    "checkType": "COMMAND",
+                    "comparison": "EQUALS",
+                    "normalize": [
+                        "TRIM",
+                        "LOWER"
+                    ],
+                    "onFailMessage": "node_exporter nu este activ (sau nu este instalat)."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "13.3",
+            "title": "Capacitate disk sub prag (root <= 85%)",
+            "category": "CIS Control 13: Network Monitoring and Defense",
+            "severity": "MEDIUM",
+            "rationale": "Disk full duce la downtime si pierdere de log-uri.",
+            "automatedChecks": [
+                {
+                    "checkId": "13.3.1",
+                    "title": "Utilizare root partition <= 85%",
+                    "command": "df -P / 2>/dev/null | awk 'NR==2{print $5}' | tr -d '%'",
+                    "expectedResult": "85",
+                    "checkType": "COMMAND",
+                    "comparison": "NUM_LE",
+                    "parser": "INT",
+                    "normalize": [
+                        "TRIM"
+                    ],
+                    "onFailMessage": "Utilizarea pe / depaseste pragul. Curatare sau extindere volum."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "14.1",
+            "title": "Training securitate pentru angajati",
+            "category": "CIS Control 14: Security Awareness and Skills Training",
+            "severity": "MEDIUM",
+            "rationale": "Angajatii informati sunt prima linie de aparare.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "14.1.M1",
+                    "title": "Evidenta training securitate",
+                    "instructions": "Furnizeaza evidenta ca echipa a participat la training de securitate.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "14.2",
+            "title": "Onboarding securitate pentru administratori",
+            "category": "CIS Control 14: Security Awareness and Skills Training",
+            "severity": "MEDIUM",
+            "rationale": "Administratorii au risc mai mare; onboarding-ul reduce erori critice.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "14.2.M1",
+                    "title": "Checklist onboarding admin",
+                    "instructions": "Ataseaza checklist onboarding pentru administratori (acces, MFA, parole, bastion, change mgmt).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "15.1",
+            "title": "Management furnizori de servicii",
+            "category": "CIS Control 15: Service Provider Management",
+            "severity": "MEDIUM",
+            "rationale": "Furnizorii pot fi un punct slab in lantul de securitate.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "15.1.M1",
+                    "title": "Inventar furnizori cu acces",
+                    "instructions": "Lista furnizorilor care au acces la acest server sau la datele de pe el.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "15.2",
+            "title": "Acces furnizori: aprobare si logare",
+            "category": "CIS Control 15: Service Provider Management",
+            "severity": "HIGH",
+            "rationale": "Accesul third-party trebuie controlat, temporar si auditat.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "15.2.M1",
+                    "title": "Procedura acces third-party",
+                    "instructions": "Ataseaza procedura pentru acces third-party (aprobare, timebound, MFA, logging, revocare).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "16.1",
+            "title": "Change management pentru configuratii critice",
+            "category": "CIS Control 16: Application Software Security",
+            "severity": "HIGH",
+            "rationale": "Schimbarile necontrolate duc la configuratii insecure si downtime.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "16.1.M1",
+                    "title": "Proces aprobare schimbari",
+                    "instructions": "Documenteaza procesul de change management pentru configuratii (cine aproba, evidenta, rollback).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "17.1",
+            "title": "Plan de raspuns la incidente",
+            "category": "CIS Control 17: Incident Response Management",
+            "severity": "HIGH",
+            "rationale": "Un plan predefinit accelereaza raspunsul la incidente.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "17.1.M1",
+                    "title": "Documenteaza planul IR",
+                    "instructions": "Furnizeaza referinta la planul de raspuns la incidente.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": false,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "18.1",
+            "title": "Penetration testing si remediere",
+            "category": "CIS Control 18: Penetration Testing",
+            "severity": "MEDIUM",
+            "rationale": "Testarea periodica valideaza eficienta controalelor si descopera gap-uri.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "18.1.M1",
+                    "title": "Raport pentest + plan remediere",
+                    "instructions": "Ataseaza raportul de pentest (sau VA) si dovada de remediere pentru finding-urile critice.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        }
+    ]
+}
