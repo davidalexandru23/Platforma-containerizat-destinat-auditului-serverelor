@@ -9,7 +9,7 @@ const client = axios.create({
     },
 });
 
-// interceptor pt token
+// Interceptor pentru token
 client.interceptors.request.use((config) => {
     const token = localStorage.getItem('accessToken');
     if (token) {
@@ -18,7 +18,7 @@ client.interceptors.request.use((config) => {
     return config;
 });
 
-// interceptor pt refresh token
+// Interceptor pentru token de reimprospatare
 client.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -44,7 +44,7 @@ client.interceptors.response.use(
                 originalRequest.headers.Authorization = `Bearer ${accessToken}`;
                 return client(originalRequest);
             } catch (refreshError) {
-                // refresh failed, logout
+                // Reimprospatare esuata, deconectare
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
                 localStorage.removeItem('user');

@@ -1,0 +1,345 @@
+{
+    "$schema": "bittrail-template@1.0",
+    "metadata": {
+        "name": "Supply Chain & SBOM Readiness (SLSA-lite) - Linux + Docker",
+        "description": "Template orientat pe supply chain software si SBOM readiness (SLSA-lite): inventar pachete, integritate repo-uri, postură de patching, politici pentru containere (latest, digest pinning), semne de repo-uri nesigure si hygiene (keys/ssh). Verificarile sunt implementate ca COMMAND checks (bash) pentru compatibilitate cu agentul actual.",
+        "version": "1.0.0",
+        "type": "CUSTOM",
+        "author": "BitTrail Platform",
+        "createdAt": "2026-01-27T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "SC-1",
+            "title": "SBOM-lite: Baza sistemului (OS + pachete)",
+            "category": "SUPPLY_CHAIN",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-1.1",
+                    "title": "Detecteaza distributia (os-release)",
+                    "command": "test -f /etc/os-release && echo OK || echo MISSING",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Lipseste /etc/os-release. Agentul nu poate identifica OS-ul pentru inventar."
+                },
+                {
+                    "checkId": "SC-1.2",
+                    "title": "Inventar pachete (dpkg): exista pachete instalate (Debian/Ubuntu)",
+                    "command": "command -v dpkg-query >/dev/null 2>&1 && dpkg-query -W 2>/dev/null | wc -l || echo 0",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_THAN",
+                    "onFailMessage": "Nu s-a putut obtine inventarul dpkg (dpkg-query lipseste sau 0 pachete)."
+                },
+                {
+                    "checkId": "SC-1.3",
+                    "title": "Inventar pachete (rpm): exista pachete instalate (RHEL/CentOS/Fedora)",
+                    "command": "command -v rpm >/dev/null 2>&1 && rpm -qa 2>/dev/null | wc -l || echo 0",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_THAN",
+                    "onFailMessage": "Nu s-a putut obtine inventarul rpm (rpm lipseste sau 0 pachete)."
+                },
+                {
+                    "checkId": "SC-1.4",
+                    "title": "Exista un manager de pachete detectabil (apt/dnf/yum)",
+                    "command": "(command -v apt >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1) && echo OK || echo MISSING",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Nu a fost detectat niciun manager de pachete (apt/dnf/yum)."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-1.M1",
+                    "title": "Politica SBOM: exista proces documentat de generare SBOM pentru aplicatii (nu doar OS)",
+                    "instructions": "Confirmati daca exista o procedura/standard intern (ex: CycloneDX/SPDX) pentru generarea SBOM la build/deploy.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SC-2",
+            "title": "Repository Integrity: surse oficiale, TLS, semnaturi",
+            "category": "SUPPLY_CHAIN",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-2.1",
+                    "title": "Repo-uri APT pe HTTP (nesigur) - detectie",
+                    "command": "if [ -d /etc/apt ]; then grep -RhoE '^[[:space:]]*deb[[:space:]]+http://[^[:space:]]+' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null | wc -l; else echo 0; fi",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Au fost detectate repo-uri APT pe http:// (fara TLS). Risc supply chain (MITM)."
+                },
+                {
+                    "checkId": "SC-2.2",
+                    "title": "Repo-uri APT third-party (sources.list.d) - inventar existenta",
+                    "command": "ls -1 /etc/apt/sources.list.d 2>/dev/null | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_OR_EQUAL",
+                    "onFailMessage": "Nu s-a putut citi /etc/apt/sources.list.d (permisiuni sau nu exista)."
+                },
+                {
+                    "checkId": "SC-2.3",
+                    "title": "APT: foloseste keyrings moderne (signed-by) in surse",
+                    "command": "if [ -f /etc/apt/sources.list ] || [ -d /etc/apt/sources.list.d ]; then grep -RhoE 'signed-by=' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null | wc -l; else echo 0; fi",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_THAN",
+                    "onFailMessage": "Nu s-au gasit referinte signed-by= in sursele APT. Recomandat keyrings per-repo in /etc/apt/keyrings."
+                },
+                {
+                    "checkId": "SC-2.4",
+                    "title": "Exista /etc/apt/keyrings (best practice pentru chei repo)",
+                    "command": "[ -d /etc/apt/keyrings ] && echo OK || echo MISSING",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Nu exista /etc/apt/keyrings. Recomandat pentru management chei repo (signed-by)."
+                },
+                {
+                    "checkId": "SC-2.5",
+                    "title": "DNF/YUM: GPGcheck activ (best effort)",
+                    "command": "if command -v dnf >/dev/null 2>&1; then (dnf config-manager --dump 2>/dev/null | grep -E '^gpgcheck=' | head -n1 | cut -d= -f2); elif command -v yum >/dev/null 2>&1; then (yum-config-manager --dump 2>/dev/null | grep -E '^gpgcheck=' | head -n1 | cut -d= -f2); else echo 1; fi",
+                    "expectedResult": "1",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "gpgcheck nu pare activ pentru dnf/yum (sau nu poate fi determinat)."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-2.M1",
+                    "title": "Lista repo-uri aprobate",
+                    "instructions": "Exista o lista aprobata de repo-uri (oficiale + third-party) si un proces de review pentru adaugare?",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SC-3",
+            "title": "Patching & Update Posture: reduceri risc vulnerabilitati supply chain",
+            "category": "SUPPLY_CHAIN",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-3.1",
+                    "title": "APT: exista actualizari disponibile (upgradable count)",
+                    "command": "if command -v apt >/dev/null 2>&1; then apt list --upgradable 2>/dev/null | tail -n +2 | wc -l; else echo 0; fi",
+                    "expectedResult": "50",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "Prea multe pachete cu update disponibil (peste prag). Indica patching slab."
+                },
+                {
+                    "checkId": "SC-3.2",
+                    "title": "Unattended upgrades (Debian/Ubuntu) - serviciu instalat",
+                    "command": "if command -v dpkg-query >/dev/null 2>&1; then dpkg-query -W unattended-upgrades >/dev/null 2>&1 && echo INSTALLED || echo MISSING; else echo UNKNOWN; fi",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "unattended-upgrades nu este instalat (sau nu se poate determina)."
+                },
+                {
+                    "checkId": "SC-3.3",
+                    "title": "Unattended upgrades - configurare activa (20auto-upgrades)",
+                    "command": "if [ -f /etc/apt/apt.conf.d/20auto-upgrades ]; then grep -E 'APT::Periodic::Unattended-Upgrade\\s+\"1\"' /etc/apt/apt.conf.d/20auto-upgrades >/dev/null 2>&1 && echo OK || echo NOT_SET; else echo MISSING; fi",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Unattended upgrades nu pare activ in /etc/apt/apt.conf.d/20auto-upgrades."
+                },
+                {
+                    "checkId": "SC-3.4",
+                    "title": "Reboot required (kernel/updates) - detectie",
+                    "command": "test -f /var/run/reboot-required && echo YES || echo NO",
+                    "expectedResult": "NO",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Serverul necesita reboot dupa update-uri (reboot-required prezent)."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-3.M1",
+                    "title": "Fereastra de patching si SLA",
+                    "instructions": "Care este SLA-ul pentru aplicarea patch-urilor critice? Ex: 7/14/30 zile.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SC-4",
+            "title": "Container Supply Chain: imagini, taguri, digest pinning, registries",
+            "category": "SUPPLY_CHAIN",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-4.1",
+                    "title": "Docker instalat - detectie",
+                    "command": "command -v docker >/dev/null 2>&1 && echo OK || echo MISSING",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Docker nu este instalat sau nu este in PATH. Se sar verificarile de containere."
+                },
+                {
+                    "checkId": "SC-4.2",
+                    "title": "Docker daemon accesibil (docker ps)",
+                    "command": "command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1 && echo OK || echo NO",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Nu se poate rula docker ps (daemon oprit sau permisiuni insuficiente)."
+                },
+                {
+                    "checkId": "SC-4.3",
+                    "title": "Containere ruland - count (informativ)",
+                    "command": "command -v docker >/dev/null 2>&1 && docker ps -q 2>/dev/null | wc -l || echo 0",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_OR_EQUAL",
+                    "onFailMessage": "Nu se poate determina numarul de containere."
+                },
+                {
+                    "checkId": "SC-4.4",
+                    "title": "Detectie utilizare tag :latest in containere active (FAIL daca >0)",
+                    "command": "command -v docker >/dev/null 2>&1 && docker ps --format '{{.Image}}' 2>/dev/null | grep -E '(:latest)$' -c || echo 0",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Au fost detectate containere cu imagine :latest. Recomandat pinning pe versiune/digest."
+                },
+                {
+                    "checkId": "SC-4.5",
+                    "title": "Detectie imagini fara digest pinning (RepoDigests lipsa) pentru containere active",
+                    "command": "if command -v docker >/dev/null 2>&1; then docker ps -q 2>/dev/null | while read -r id; do docker inspect --format '{{json .RepoDigests}}' \"$id\" 2>/dev/null; done | grep -c '\\[\\]' || echo 0; else echo 0; fi",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Exista containere fara RepoDigests (nepinned). Risc supply chain: imaginea se poate schimba fara control."
+                },
+                {
+                    "checkId": "SC-4.6",
+                    "title": "Registries non-standard folosite in imagini active (best effort: detecteaza host-uri)",
+                    "command": "command -v docker >/dev/null 2>&1 && docker ps --format '{{.Image}}' 2>/dev/null | awk -F/ 'NF>1{print $1}' | grep -E '\\.' -c || echo 0",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_OR_EQUAL",
+                    "onFailMessage": "Nu se poate determina registries. (Check informativ)"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-4.M1",
+                    "title": "Politica imagini: aprobate, scanate, semnate",
+                    "instructions": "Exista politica de folosire imagini (registries permise), scanning (SCA), si/sau semnare (cosign/notary)?",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                },
+                {
+                    "checkId": "SC-4.M2",
+                    "title": "Build pipeline: provenienta imagini",
+                    "instructions": "Imaginile sunt construite intern (CI) sau luate direct din public registries? Exista review + locking (digest)?",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SC-5",
+            "title": "Source of Truth & Git hygiene (server-side indicators)",
+            "category": "SUPPLY_CHAIN",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-5.1",
+                    "title": "Git instalat (pentru audit repo-uri / provenienta cod)",
+                    "command": "command -v git >/dev/null 2>&1 && echo OK || echo MISSING",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "git nu este instalat. Nu se pot verifica unele aspecte legate de provenienta codului."
+                },
+                {
+                    "checkId": "SC-5.2",
+                    "title": "Detectie directoare .git pe server (potential code checkout in productie)",
+                    "command": "find / -maxdepth 4 -type d -name .git 2>/dev/null | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "Exista checkout-uri git in filesystem (posibil cod sursa in productie). Verificati politica."
+                },
+                {
+                    "checkId": "SC-5.3",
+                    "title": "Detectie chei private expuse in directoare comune (best effort)",
+                    "command": "find /etc /home /root -maxdepth 4 -type f \\( -name 'id_rsa' -o -name '*.pem' -o -name '*_key' \\) 2>/dev/null | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "Au fost gasite potentiale chei private in directoare comune. Risc supply chain/credential leakage."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-5.M1",
+                    "title": "Politica de deployment: interzis build pe server (snowflake)",
+                    "instructions": "Confirmati ca build-urile se fac in CI/CD si nu direct pe server, si ca exista un proces de promovare (dev->staging->prod).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SC-6",
+            "title": "SLSA-lite: Controale minime de integritate si hardening legate de supply chain",
+            "category": "SUPPLY_CHAIN",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-6.1",
+                    "title": "SSH: PasswordAuthentication dezactivat (recomandat)",
+                    "command": "if [ -f /etc/ssh/sshd_config ]; then (grep -Ei '^[[:space:]]*PasswordAuthentication[[:space:]]+no' /etc/ssh/sshd_config >/dev/null 2>&1 && echo OK || echo NOT_SET); else echo MISSING; fi",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH PasswordAuthentication nu este setat pe 'no' (sau nu poate fi determinat)."
+                },
+                {
+                    "checkId": "SC-6.2",
+                    "title": "SSH: RootLogin dezactivat (recomandat)",
+                    "command": "if [ -f /etc/ssh/sshd_config ]; then (grep -Ei '^[[:space:]]*PermitRootLogin[[:space:]]+no' /etc/ssh/sshd_config >/dev/null 2>&1 && echo OK || echo NOT_SET); else echo MISSING; fi",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH PermitRootLogin nu este setat pe 'no' (sau nu poate fi determinat)."
+                },
+                {
+                    "checkId": "SC-6.3",
+                    "title": "Firewall activ (ufw sau firewalld) - detectie",
+                    "command": "((command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi active) || (command -v firewall-cmd >/dev/null | grep -qi running)) && echo OK || echo NO",
+                    "expectedResult": "OK",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Firewall nu pare activ (ufw/firewalld). Risc exploatare si compromitere supply chain prin acces lateral."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-6.M1",
+                    "title": "Control acces la repo-uri/pipeline",
+                    "instructions": "Review: MFA obligatoriu pe Git/Registry? Rotatie token-uri? Least privilege pentru deploy keys?",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                },
+                {
+                    "checkId": "SC-6.M2",
+                    "title": "Semnare artefacte",
+                    "instructions": "Exista semnare pentru release-uri / pachete / imagini (GPG/cosign)? Daca nu, justificare si plan.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        }
+    ]
+}

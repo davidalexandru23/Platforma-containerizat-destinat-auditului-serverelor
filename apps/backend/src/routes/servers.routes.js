@@ -1,16 +1,17 @@
-const express = require('express');
+import express from 'express';
+import * as serversService from '../services/servers.service.js';
+import { authenticate, authorize } from '../middleware/auth.middleware.js';
+import { auditLog } from '../middleware/audit.middleware.js';
+import { body, validationResult } from 'express-validator';
+
 const router = express.Router();
-const serversService = require('../services/servers.service');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
-const { auditLog } = require('../middleware/audit.middleware');
-const { body, validationResult } = require('express-validator');
 
 /**
  * @swagger
  * /servers:
  *   get:
  *     tags: [Servers]
- *     summary: Lista servere (filtrate per permisiuni)
+ *     summary: Lista servere (filtrate dupa permisiuni)
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/',
@@ -50,7 +51,7 @@ router.get('/:id',
  * /servers:
  *   post:
  *     tags: [Servers]
- *     summary: Adauga server nou
+ *     summary: Adaugare server nou
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/',
@@ -83,7 +84,7 @@ router.post('/',
  * /servers/{id}:
  *   put:
  *     tags: [Servers]
- *     summary: Actualizeaza server
+ *     summary: Actualizare server
  *     security: [{ bearerAuth: [] }]
  */
 router.put('/:id',
@@ -105,7 +106,7 @@ router.put('/:id',
  * /servers/{id}:
  *   delete:
  *     tags: [Servers]
- *     summary: Sterge server
+ *     summary: Stergere server
  *     security: [{ bearerAuth: [] }]
  */
 router.delete('/:id',
@@ -125,9 +126,29 @@ router.delete('/:id',
 /**
  * @swagger
  * /servers/{id}/enrollToken:
+ *   get:
+ *     tags: [Servers]
+ *     summary: Returnare token inregistrare existent
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get('/:id/enrollToken',
+    authenticate,
+    async (req, res, next) => {
+        try {
+            const result = await serversService.getEnrollToken(req.params.id);
+            res.json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+/**
+ * @swagger
+ * /servers/{id}/enrollToken:
  *   post:
  *     tags: [Servers]
- *     summary: Genereaza token enrollment pentru agent
+ *     summary: Generare token inregistrare pentru agent
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/:id/enrollToken',
@@ -169,7 +190,7 @@ router.get('/:id/permissions',
  * /servers/{id}/permissions:
  *   post:
  *     tags: [Servers]
- *     summary: Acorda permisiune user pentru server
+ *     summary: Acordare permisiune utilizator pentru server
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/:id/permissions',
@@ -192,7 +213,7 @@ router.post('/:id/permissions',
  * /servers/{id}/permissions/{userId}:
  *   delete:
  *     tags: [Servers]
- *     summary: Revoca permisiune user pentru server
+ *     summary: Revocare permisiune utilizator pentru server
  *     security: [{ bearerAuth: [] }]
  */
 router.delete('/:id/permissions/:userId',
@@ -234,7 +255,7 @@ router.get('/:id/metrics/latest',
  * /servers/{id}/inventory/latest:
  *   get:
  *     tags: [Servers]
- *     summary: Ultimul inventory snapshot pentru server
+ *     summary: Ultimul snapshot inventar pentru server
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id/inventory/latest',
@@ -254,14 +275,14 @@ router.get('/:id/inventory/latest',
  * /servers/{id}/audits:
  *   get:
  *     tags: [Servers]
- *     summary: Istoricul auditurilor pentru un server
+ *     summary: Istoric audituri pentru un server
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id/audits',
     authenticate,
     async (req, res, next) => {
         try {
-            const auditService = require('../services/audit.service');
+            const auditService = await import('../services/audit.service.js');
             const audits = await auditService.findAll(req.params.id);
             res.json(audits);
         } catch (error) {
@@ -270,4 +291,26 @@ router.get('/:id/audits',
     }
 );
 
-module.exports = router;
+/**
+ * @swagger
+ * /servers/{id}/run-check:
+ *   post:
+ *     tags: [Servers]
+ *     summary: Rulare verificare ad-hoc pe agent
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post('/:id/run-check',
+    authenticate,
+    authorize('ADMIN', 'AUDITOR'),
+    async (req, res, next) => {
+        try {
+            const agentService = await import('../services/agent.service.js');
+            const result = await agentService.runAdhocCheck(req.params.id, req.body);
+            res.json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+export default router;

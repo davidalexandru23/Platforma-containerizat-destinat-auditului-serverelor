@@ -13,42 +13,52 @@ participant "Backend" as B
 participant "Database" as D
 participant "Agent" as G
 
-== Initiere ==
-A -> F : Selecteaza audit
-F -> B : POST /audit/run
-B -> D : INSERT AuditRun
+== Initiere Audit ==
+A -> F : Selecteaza server + template
+F -> B : POST /api/audit/runs
+B -> D : INSERT AuditRun (PENDING)
 D --> B : auditRunId
-B --> F : 201 {auditRunId}
+B -> B : Genereaza CheckResults
+B -> D : INSERT CheckResults[]
+B --> F : 201 {auditRun}
 F --> A : Afiseaza progres
 
 == Verificari Automate ==
-G -> B : GET /audit/pending
-B -> D : SELECT checks
+G -> B : GET /api/agent/checks/pending
+B -> D : SELECT checks (PENDING)
 D --> B : lista checks
 B --> G : checks[]
 
-G -> G : Executa comenzi
-G -> B : POST /audit/results
-B -> D : INSERT CheckResult
+G -> G : Executa comenzi local
+G -> B : POST /api/agent/checks/results
+B -> D : UPDATE CheckResult
+B -> B : Calcul scor partial
 B --> G : 200 OK
 
+B ->> F : WS: audit:progress
+
 == Verificari Manuale ==
+A -> F : Vizualizeaza ManualTaskResults
+F -> B : GET /api/audit/runs/:id
+B -> D : SELECT ManualTaskResults
+D --> B : tasks[]
+B --> F : tasks[]
+
 A -> F : Incarca evidenta
-F -> B : POST /evidence
+F -> B : POST /api/audit/runs/:id/evidence
 B -> D : INSERT Evidence
 B --> F : 200 OK
 
 A -> F : Aproba task
-F -> B : POST /approve
-B -> D : UPDATE ManualTask
+F -> B : POST /api/audit/runs/:id/approve
+B -> D : UPDATE ManualTaskResult
 B --> F : 200 OK
 
 == Finalizare ==
-A -> F : Finalizeaza
-F -> B : POST /complete
-B -> B : Calcul scor
-B -> D : UPDATE AuditRun
-B --> F : {score}
+B -> B : Detecteaza completare
+B -> D : UPDATE AuditRun (COMPLETED)
+B -> B : Calcul scor final
+B ->> F : WS: audit:completed
 F --> A : Raport final
 
 @enduml

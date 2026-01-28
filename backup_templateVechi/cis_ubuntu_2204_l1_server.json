@@ -1,0 +1,906 @@
+{
+    "$schema": "bittrail-template@1.0",
+    "metadata": {
+        "name": "CIS Ubuntu 22.04 LTS Level 1 Server",
+        "description": "Template de audit bazat pe CIS Benchmark pentru Ubuntu 22.04 LTS Level 1 Server. Controale automatizate pentru configuratii de securitate conform recomandarilor CIS (Center for Internet Security).",
+        "version": "2.0.0",
+        "type": "CIS_BENCHMARK",
+        "author": "BitTrail Platform",
+        "source": "CIS Ubuntu Linux 22.04 LTS Benchmark v2.0.0",
+        "createdAt": "2024-01-01T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "1.1.1.1",
+            "title": "Verifica cramfs dezactivat",
+            "category": "1. Initial Setup > 1.1 Filesystem Configuration",
+            "severity": "LOW",
+            "rationale": "Sistemul de fisiere cramfs este rar folosit si poate fi dezactivat pentru a reduce suprafata de atac.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.1.1.1.a",
+                    "title": "Modul cramfs nu e incarcat",
+                    "command": "lsmod | grep -q cramfs && echo 'LOADED' || echo 'NOT_LOADED'",
+                    "expectedResult": "NOT_LOADED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Modulul cramfs este incarcat in kernel. Dezactivati-l cu: modprobe -r cramfs"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.1.1.2",
+            "title": "Verifica squashfs dezactivat",
+            "category": "1. Initial Setup > 1.1 Filesystem Configuration",
+            "severity": "LOW",
+            "rationale": "squashfs este folosit pentru snap. Daca nu folositi snap, dezactivati-l.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.1.1.2.a",
+                    "title": "Modul squashfs nu e incarcat",
+                    "command": "lsmod | grep -q squashfs && echo 'LOADED' || echo 'NOT_LOADED'",
+                    "expectedResult": "NOT_LOADED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "squashfs este incarcat (normal daca folositi snap packages)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.1.2.1",
+            "title": "Verifica partitie separata /tmp",
+            "category": "1. Initial Setup > 1.1 Filesystem Configuration",
+            "severity": "MEDIUM",
+            "rationale": "O partitie separata /tmp permite aplicarea optiunilor noexec, nosuid pentru securitate.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.1.2.1.a",
+                    "title": "Partitie /tmp existenta",
+                    "command": "findmnt -n /tmp > /dev/null 2>&1 && echo 'MOUNTED' || echo 'NOT_MOUNTED'",
+                    "expectedResult": "MOUNTED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/tmp nu este pe o partitie separata"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.3.1",
+            "title": "Verifica AIDE instalat",
+            "category": "1. Initial Setup > 1.3 Filesystem Integrity",
+            "severity": "HIGH",
+            "rationale": "AIDE (Advanced Intrusion Detection Environment) detecteaza modificari neautorizate ale fisierelor sistem.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.3.1.a",
+                    "title": "AIDE instalat",
+                    "command": "dpkg-query -W -f='${Status}' aide 2>/dev/null | grep -q 'installed' && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "AIDE nu este instalat. Instalati cu: apt install aide"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.4.1",
+            "title": "Verifica parola bootloader GRUB",
+            "category": "1. Initial Setup > 1.4 Secure Boot",
+            "severity": "HIGH",
+            "rationale": "Protejarea bootloader-ului impiedica modificarea parametrilor de boot.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.4.1.a",
+                    "title": "Parola GRUB configurata",
+                    "command": "grep -q '^set superusers' /boot/grub/grub.cfg 2>/dev/null && echo 'CONFIGURED' || echo 'NOT_CONFIGURED'",
+                    "expectedResult": "CONFIGURED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Bootloader-ul GRUB nu are parola configurata"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.5.1",
+            "title": "Verifica ASLR activat",
+            "category": "1. Initial Setup > 1.5 Process Hardening",
+            "severity": "HIGH",
+            "rationale": "Address Space Layout Randomization (ASLR) face exploatarea vulnerabilitatilor mai dificila.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.5.1.a",
+                    "title": "ASLR valoare = 2",
+                    "command": "sysctl -n kernel.randomize_va_space 2>/dev/null",
+                    "expectedResult": "2",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "ASLR nu este setat la valoarea maxima (2)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.5.2",
+            "title": "Verifica core dumps dezactivate",
+            "category": "1. Initial Setup > 1.5 Process Hardening",
+            "severity": "MEDIUM",
+            "rationale": "Core dumps pot contine informatii sensibile si trebuie restrictionate.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.5.2.a",
+                    "title": "fs.suid_dumpable = 0",
+                    "command": "sysctl -n fs.suid_dumpable 2>/dev/null",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Core dumps sunt permise pentru SUID (fs.suid_dumpable != 0)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.6.1.1",
+            "title": "Verifica AppArmor instalat",
+            "category": "1. Initial Setup > 1.6 Mandatory Access Control",
+            "severity": "HIGH",
+            "rationale": "AppArmor ofera control obligatoriu al accesului (MAC) pentru aplicatii.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.6.1.1.a",
+                    "title": "AppArmor instalat",
+                    "command": "dpkg-query -W -f='${Status}' apparmor 2>/dev/null | grep -q 'installed' && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "AppArmor nu este instalat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "1.6.1.2",
+            "title": "Verifica AppArmor activ",
+            "category": "1. Initial Setup > 1.6 Mandatory Access Control",
+            "severity": "HIGH",
+            "rationale": "AppArmor trebuie sa fie activat pentru a asigura protectia aplicatiilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "1.6.1.2.a",
+                    "title": "AppArmor enabled",
+                    "command": "aa-enabled 2>/dev/null || echo 'DISABLED'",
+                    "expectedResult": "Yes",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "AppArmor nu este activat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "2.1.1",
+            "title": "Verifica servicii inutile dezactivate - xinetd",
+            "category": "2. Services > 2.1 Special Purpose Services",
+            "severity": "MEDIUM",
+            "rationale": "xinetd nu mai este necesar pe sistemele moderne.",
+            "automatedChecks": [
+                {
+                    "checkId": "2.1.1.a",
+                    "title": "xinetd nu este instalat",
+                    "command": "dpkg-query -W xinetd 2>/dev/null && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "NOT_INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "xinetd este instalat. Dezinstalati-l daca nu este necesar."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "2.1.2",
+            "title": "Verifica servicii inutile - avahi-daemon",
+            "category": "2. Services > 2.1 Special Purpose Services",
+            "severity": "LOW",
+            "rationale": "Avahi permite descoperirea automata de servicii, rar necesar pe servere.",
+            "automatedChecks": [
+                {
+                    "checkId": "2.1.2.a",
+                    "title": "avahi-daemon nu ruleaza",
+                    "command": "systemctl is-active avahi-daemon 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "inactive",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "avahi-daemon ruleaza. Dezactivati cu: systemctl disable --now avahi-daemon"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "2.1.3",
+            "title": "Verifica CUPS dezactivat (daca nu e necesar)",
+            "category": "2. Services > 2.1 Special Purpose Services",
+            "severity": "LOW",
+            "rationale": "CUPS (printing) nu este necesar pe majoritatea serverelor.",
+            "automatedChecks": [
+                {
+                    "checkId": "2.1.3.a",
+                    "title": "cups nu ruleaza",
+                    "command": "systemctl is-active cups 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "inactive",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "CUPS ruleaza pe acest server"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "2.2.1",
+            "title": "Verifica sincronizare timp",
+            "category": "2. Services > 2.2 Time Synchronization",
+            "severity": "MEDIUM",
+            "rationale": "Sincronizarea timpului este necesara pentru logging si autentificare.",
+            "automatedChecks": [
+                {
+                    "checkId": "2.2.1.a",
+                    "title": "NTP/Chrony/timesyncd activ",
+                    "command": "systemctl is-active chronyd 2>/dev/null || systemctl is-active systemd-timesyncd 2>/dev/null || systemctl is-active ntp 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Niciun serviciu de sincronizare timp nu este activ"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.1.1",
+            "title": "Verifica IPv6 dezactivat (daca nu e folosit)",
+            "category": "3. Network Configuration > 3.1 Disable unused protocols",
+            "severity": "LOW",
+            "rationale": "Dezactivati IPv6 daca nu este folosit pentru a reduce suprafata de atac.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.1.1.a",
+                    "title": "Status IPv6",
+                    "command": "sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo '0'",
+                    "expectedResult": "1",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "IPv6 este activat. Dezactivati daca nu este necesar."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.2.1",
+            "title": "Verifica IP forwarding dezactivat",
+            "category": "3. Network Configuration > 3.2 Network Parameters",
+            "severity": "MEDIUM",
+            "rationale": "Serverele care nu sunt routere nu trebuie sa faca forwarding IP.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.2.1.a",
+                    "title": "IPv4 forwarding dezactivat",
+                    "command": "sysctl -n net.ipv4.ip_forward 2>/dev/null",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "IP forwarding este activat (setat la 1)"
+                },
+                {
+                    "checkId": "3.2.1.b",
+                    "title": "IPv6 forwarding dezactivat",
+                    "command": "sysctl -n net.ipv6.conf.all.forwarding 2>/dev/null || echo '0'",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "IPv6 forwarding este activat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.2.2",
+            "title": "Verifica ICMP redirects dezactivate",
+            "category": "3. Network Configuration > 3.2 Network Parameters",
+            "severity": "MEDIUM",
+            "rationale": "ICMP redirects pot fi folosite in atacuri man-in-the-middle.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.2.2.a",
+                    "title": "ICMP redirects send dezactivat",
+                    "command": "sysctl -n net.ipv4.conf.all.send_redirects 2>/dev/null",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "ICMP send redirects este activat"
+                },
+                {
+                    "checkId": "3.2.2.b",
+                    "title": "ICMP redirects accept dezactivat",
+                    "command": "sysctl -n net.ipv4.conf.all.accept_redirects 2>/dev/null",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "ICMP accept redirects este activat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.2.3",
+            "title": "Verifica source routing dezactivat",
+            "category": "3. Network Configuration > 3.2 Network Parameters",
+            "severity": "MEDIUM",
+            "rationale": "Source routing poate fi folosit in atacuri de tip spoofing.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.2.3.a",
+                    "title": "Source route dezactivat",
+                    "command": "sysctl -n net.ipv4.conf.all.accept_source_route 2>/dev/null",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Source routing este activat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.2.4",
+            "title": "Verifica SYN cookies activat",
+            "category": "3. Network Configuration > 3.2 Network Parameters",
+            "severity": "MEDIUM",
+            "rationale": "SYN cookies protejeaza impotriva atacurilor SYN flood.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.2.4.a",
+                    "title": "TCP SYN cookies activat",
+                    "command": "sysctl -n net.ipv4.tcp_syncookies 2>/dev/null",
+                    "expectedResult": "1",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SYN cookies nu sunt activate"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.3.1",
+            "title": "Verifica firewall UFW instalat",
+            "category": "3. Network Configuration > 3.3 Firewall",
+            "severity": "CRITICAL",
+            "rationale": "Un firewall este esential pentru protectia perimetrului sistemului.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.3.1.a",
+                    "title": "UFW instalat",
+                    "command": "dpkg-query -W -f='${Status}' ufw 2>/dev/null | grep -q 'installed' && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "UFW nu este instalat. Instalati cu: apt install ufw"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "3.3.2",
+            "title": "Verifica firewall UFW activ",
+            "category": "3. Network Configuration > 3.3 Firewall",
+            "severity": "CRITICAL",
+            "rationale": "Firewall-ul trebuie sa fie activ pentru a filtra traficul.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.3.2.a",
+                    "title": "UFW activ",
+                    "command": "ufw status 2>/dev/null | head -1 | grep -q 'active' && echo 'ACTIVE' || echo 'INACTIVE'",
+                    "expectedResult": "ACTIVE",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "UFW nu este activ. Activati cu: ufw enable"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "3.3.2.M1",
+                    "title": "Revizuire reguli firewall",
+                    "instructions": "Rulati 'ufw status verbose' si verificati regulile. Doar porturile necesare trebuie sa fie deschise.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": false,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "3.3.3",
+            "title": "Verifica default deny incoming",
+            "category": "3. Network Configuration > 3.3 Firewall",
+            "severity": "HIGH",
+            "rationale": "Politica default trebuie sa fie deny pentru traficul inbound.",
+            "automatedChecks": [
+                {
+                    "checkId": "3.3.3.a",
+                    "title": "UFW default deny incoming",
+                    "command": "ufw status verbose 2>/dev/null | grep -q 'Default: deny (incoming)' && echo 'DENY' || echo 'NOT_DENY'",
+                    "expectedResult": "DENY",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "UFW default incoming nu este 'deny'. Setati cu: ufw default deny incoming"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.1.1",
+            "title": "Verifica auditd instalat",
+            "category": "4. Logging and Auditing > 4.1 Configure System Accounting",
+            "severity": "HIGH",
+            "rationale": "auditd permite auditarea detaliata a evenimentelor de securitate.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.1.1.a",
+                    "title": "auditd instalat",
+                    "command": "dpkg-query -W -f='${Status}' auditd 2>/dev/null | grep -q 'installed' && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "auditd nu este instalat. Instalati cu: apt install auditd"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.1.2",
+            "title": "Verifica auditd activ",
+            "category": "4. Logging and Auditing > 4.1 Configure System Accounting",
+            "severity": "HIGH",
+            "rationale": "auditd trebuie sa ruleze pentru a colecta date de audit.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.1.2.a",
+                    "title": "auditd activ",
+                    "command": "systemctl is-active auditd 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "auditd nu ruleaza. Startati cu: systemctl start auditd"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.2.1",
+            "title": "Verifica rsyslog instalat",
+            "category": "4. Logging and Auditing > 4.2 Configure Logging",
+            "severity": "HIGH",
+            "rationale": "rsyslog colecteaza log-uri sistem pentru analiza si detectie incidente.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.2.1.a",
+                    "title": "rsyslog instalat",
+                    "command": "dpkg-query -W -f='${Status}' rsyslog 2>/dev/null | grep -q 'installed' && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "rsyslog nu este instalat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.2.2",
+            "title": "Verifica rsyslog activ",
+            "category": "4. Logging and Auditing > 4.2 Configure Logging",
+            "severity": "HIGH",
+            "rationale": "rsyslog trebuie sa ruleze pentru colectarea log-urilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.2.2.a",
+                    "title": "rsyslog activ",
+                    "command": "systemctl is-active rsyslog 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "rsyslog nu ruleaza"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "4.2.3",
+            "title": "Verifica permisiuni log files",
+            "category": "4. Logging and Auditing > 4.2 Configure Logging",
+            "severity": "MEDIUM",
+            "rationale": "Log-urile trebuie sa aiba permisiuni restrictive.",
+            "automatedChecks": [
+                {
+                    "checkId": "4.2.3.a",
+                    "title": "/var/log permisiuni",
+                    "command": "stat -c '%a' /var/log 2>/dev/null",
+                    "expectedResult": "755",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/var/log nu are permisiunile corecte (ar trebui 755)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.1.1",
+            "title": "Verifica cron daemon activ",
+            "category": "5. Access Control > 5.1 Configure Cron",
+            "severity": "MEDIUM",
+            "rationale": "cron trebuie sa fie activ pentru task-uri programate de sistem.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.1.1.a",
+                    "title": "cron activ",
+                    "command": "systemctl is-active cron 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "cron nu ruleaza"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.1.2",
+            "title": "Verifica permisiuni /etc/crontab",
+            "category": "5. Access Control > 5.1 Configure Cron",
+            "severity": "MEDIUM",
+            "rationale": "Fisierul crontab trebuie sa fie accesibil doar de root.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.1.2.a",
+                    "title": "/etc/crontab permisiuni",
+                    "command": "stat -c '%a' /etc/crontab 2>/dev/null",
+                    "expectedResult": "600",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/etc/crontab nu are permisiuni 600"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.2.1",
+            "title": "Verifica SSH permisiuni config",
+            "category": "5. Access Control > 5.2 SSH Server",
+            "severity": "HIGH",
+            "rationale": "Configuratia SSH trebuie protejata impotriva modificarilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.1.a",
+                    "title": "sshd_config permisiuni",
+                    "command": "stat -c '%a' /etc/ssh/sshd_config 2>/dev/null",
+                    "expectedResult": "600",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/etc/ssh/sshd_config nu are permisiuni 600"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.2.2",
+            "title": "Verifica SSH PermitRootLogin",
+            "category": "5. Access Control > 5.2 SSH Server",
+            "severity": "CRITICAL",
+            "rationale": "Login direct ca root prin SSH este un risc major de securitate.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.2.a",
+                    "title": "PermitRootLogin dezactivat",
+                    "command": "sshd -T 2>/dev/null | grep -i '^permitrootlogin' | awk '{print $2}'",
+                    "expectedResult": "no",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH permite login root. Setati 'PermitRootLogin no' in sshd_config"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.2.3",
+            "title": "Verifica SSH PermitEmptyPasswords",
+            "category": "5. Access Control > 5.2 SSH Server",
+            "severity": "CRITICAL",
+            "rationale": "Parolele goale sunt un risc major de securitate.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.3.a",
+                    "title": "PermitEmptyPasswords no",
+                    "command": "sshd -T 2>/dev/null | grep -i '^permitemptypasswords' | awk '{print $2}'",
+                    "expectedResult": "no",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH permite parole goale"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.2.4",
+            "title": "Verifica SSH MaxAuthTries",
+            "category": "5. Access Control > 5.2 SSH Server",
+            "severity": "MEDIUM",
+            "rationale": "Limitarea incercarilor de autentificare reduce atacurile brute-force.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.4.a",
+                    "title": "MaxAuthTries <= 4",
+                    "command": "sshd -T 2>/dev/null | grep -i '^maxauthtries' | awk '{print $2}'",
+                    "expectedResult": "4",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "SSH MaxAuthTries este prea mare (ar trebui <= 4)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.2.5",
+            "title": "Verifica SSH ClientAliveInterval",
+            "category": "5. Access Control > 5.2 SSH Server",
+            "severity": "MEDIUM",
+            "rationale": "Timeout-ul sesiunilor SSH inactive reduce riscul de acces neautorizat.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.5.a",
+                    "title": "ClientAliveInterval configurat",
+                    "command": "sshd -T 2>/dev/null | grep -i '^clientaliveinterval' | awk '{print $2}'",
+                    "expectedResult": "300",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "SSH ClientAliveInterval prea mare sau neconfigurat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.2.6",
+            "title": "Verifica SSH X11Forwarding",
+            "category": "5. Access Control > 5.2 SSH Server",
+            "severity": "LOW",
+            "rationale": "X11 forwarding nu este necesar pe servere si poate fi un risc.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.6.a",
+                    "title": "X11Forwarding dezactivat",
+                    "command": "sshd -T 2>/dev/null | grep -i '^x11forwarding' | awk '{print $2}'",
+                    "expectedResult": "no",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH X11Forwarding este activat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.2.7",
+            "title": "Verifica SSH AllowTcpForwarding",
+            "category": "5. Access Control > 5.2 SSH Server",
+            "severity": "MEDIUM",
+            "rationale": "TCP forwarding poate permite pivotare prin SSH.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.2.7.a",
+                    "title": "AllowTcpForwarding dezactivat",
+                    "command": "sshd -T 2>/dev/null | grep -i '^allowtcpforwarding' | awk '{print $2}'",
+                    "expectedResult": "no",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH AllowTcpForwarding este activat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.3.1",
+            "title": "Verifica PAM instalat",
+            "category": "5. Access Control > 5.3 Configure PAM",
+            "severity": "HIGH",
+            "rationale": "PAM (Pluggable Authentication Modules) gestioneaza autentificarea.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.3.1.a",
+                    "title": "libpam-runtime instalat",
+                    "command": "dpkg-query -W -f='${Status}' libpam-runtime 2>/dev/null | grep -q 'installed' && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "libpam-runtime nu este instalat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.4.1",
+            "title": "Verifica PASS_MAX_DAYS",
+            "category": "5. Access Control > 5.4 Password Configuration",
+            "severity": "MEDIUM",
+            "rationale": "Parolele trebuie schimbate periodic.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.4.1.a",
+                    "title": "PASS_MAX_DAYS <= 365",
+                    "command": "grep -E '^PASS_MAX_DAYS' /etc/login.defs 2>/dev/null | awk '{print $2}'",
+                    "expectedResult": "365",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "PASS_MAX_DAYS este prea mare (ar trebui <= 365)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.4.2",
+            "title": "Verifica PASS_MIN_DAYS",
+            "category": "5. Access Control > 5.4 Password Configuration",
+            "severity": "LOW",
+            "rationale": "Previne schimbarea prea frecventa a parolelor.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.4.2.a",
+                    "title": "PASS_MIN_DAYS >= 1",
+                    "command": "grep -E '^PASS_MIN_DAYS' /etc/login.defs 2>/dev/null | awk '{print $2}'",
+                    "expectedResult": "1",
+                    "comparison": "GREATER_THAN_OR_EQUAL",
+                    "onFailMessage": "PASS_MIN_DAYS este 0 (ar trebui >= 1)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.4.3",
+            "title": "Verifica PASS_WARN_AGE",
+            "category": "5. Access Control > 5.4 Password Configuration",
+            "severity": "LOW",
+            "rationale": "Utilizatorii trebuie avertizati inainte de expirarea parolei.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.4.3.a",
+                    "title": "PASS_WARN_AGE >= 7",
+                    "command": "grep -E '^PASS_WARN_AGE' /etc/login.defs 2>/dev/null | awk '{print $2}'",
+                    "expectedResult": "7",
+                    "comparison": "GREATER_THAN_OR_EQUAL",
+                    "onFailMessage": "PASS_WARN_AGE este prea mic (ar trebui >= 7)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.5.1",
+            "title": "Verifica root e singurul UID 0",
+            "category": "5. Access Control > 5.5 Root Account",
+            "severity": "CRITICAL",
+            "rationale": "Doar root ar trebui sa aiba UID 0.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.5.1.a",
+                    "title": "Un singur UID 0",
+                    "command": "awk -F: '$3==0 {print $1}' /etc/passwd | wc -l",
+                    "expectedResult": "1",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Exista mai multe conturi cu UID 0"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "5.5.2",
+            "title": "Verifica umask root",
+            "category": "5. Access Control > 5.5 Root Account",
+            "severity": "MEDIUM",
+            "rationale": "umask restrictiv pentru root protejeaza fisierele noi.",
+            "automatedChecks": [
+                {
+                    "checkId": "5.5.2.a",
+                    "title": "umask root",
+                    "command": "grep -E '^UMASK' /etc/login.defs 2>/dev/null | awk '{print $2}'",
+                    "expectedResult": "027",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "UMASK nu este setat la 027"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.1.1",
+            "title": "Verifica permisiuni /etc/passwd",
+            "category": "6. System Maintenance > 6.1 System File Permissions",
+            "severity": "HIGH",
+            "rationale": "/etc/passwd trebuie sa fie readable dar nu writable de useri normali.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.1.1.a",
+                    "title": "/etc/passwd permisiuni 644",
+                    "command": "stat -c '%a' /etc/passwd 2>/dev/null",
+                    "expectedResult": "644",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/etc/passwd nu are permisiuni 644"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.1.2",
+            "title": "Verifica permisiuni /etc/shadow",
+            "category": "6. System Maintenance > 6.1 System File Permissions",
+            "severity": "CRITICAL",
+            "rationale": "/etc/shadow contine hash-uri de parole si trebuie strict protejat.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.1.2.a",
+                    "title": "/etc/shadow permisiuni 640",
+                    "command": "stat -c '%a' /etc/shadow 2>/dev/null",
+                    "expectedResult": "640",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/etc/shadow nu are permisiuni 640"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.1.3",
+            "title": "Verifica permisiuni /etc/group",
+            "category": "6. System Maintenance > 6.1 System File Permissions",
+            "severity": "HIGH",
+            "rationale": "/etc/group trebuie protejat impotriva modificarilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.1.3.a",
+                    "title": "/etc/group permisiuni 644",
+                    "command": "stat -c '%a' /etc/group 2>/dev/null",
+                    "expectedResult": "644",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/etc/group nu are permisiuni 644"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.1.4",
+            "title": "Verifica permisiuni /etc/gshadow",
+            "category": "6. System Maintenance > 6.1 System File Permissions",
+            "severity": "HIGH",
+            "rationale": "/etc/gshadow contine parole de grup.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.1.4.a",
+                    "title": "/etc/gshadow permisiuni 640",
+                    "command": "stat -c '%a' /etc/gshadow 2>/dev/null",
+                    "expectedResult": "640",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/etc/gshadow nu are permisiuni 640"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.2.1",
+            "title": "Verifica absenta fisierelor world-writable",
+            "category": "6. System Maintenance > 6.2 User Settings",
+            "severity": "MEDIUM",
+            "rationale": "Fisierele world-writable pot fi modificate de oricine.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.2.1.a",
+                    "title": "Fisiere world-writable in /",
+                    "command": "find / -xdev -type f -perm -0002 -not -path '/proc/*' 2>/dev/null | head -5 | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Exista fisiere world-writable pe sistem"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.2.2",
+            "title": "Verifica absenta fisierelor fara owner",
+            "category": "6. System Maintenance > 6.2 User Settings",
+            "severity": "MEDIUM",
+            "rationale": "Fisierele fara owner pot indica probleme sau compromitere.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.2.2.a",
+                    "title": "Fisiere fara owner",
+                    "command": "find / -xdev \\( -nouser -o -nogroup \\) -not -path '/proc/*' 2>/dev/null | head -5 | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Exista fisiere fara owner valid"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "6.2.3",
+            "title": "Verifica directoare home existente",
+            "category": "6. System Maintenance > 6.2 User Settings",
+            "severity": "LOW",
+            "rationale": "Utilizatorii trebuie sa aiba directoare home valide.",
+            "automatedChecks": [
+                {
+                    "checkId": "6.2.3.a",
+                    "title": "Home directories exista",
+                    "command": "awk -F: '($3>=1000 && $7!=\"/usr/sbin/nologin\" && $7!=\"/bin/false\") {print $6}' /etc/passwd | while read dir; do [ ! -d \"$dir\" ] && echo \"MISSING: $dir\"; done | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Exista utilizatori fara director home valid"
+                }
+            ],
+            "manualChecks": []
+        }
+    ]
+}

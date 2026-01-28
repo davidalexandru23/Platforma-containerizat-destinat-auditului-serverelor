@@ -8,16 +8,14 @@ VERSION="1.0.0"
 BINARY_NAME="bittrail-agent"
 BUILD_DIR="build"
 
-echo "╔══════════════════════════════════════════════════╗"
-echo "║     BitTrail Agent - Build pentru Linux x86_64   ║"
-echo "╚══════════════════════════════════════════════════╝"
+echo "=== BitTrail Agent - Build pentru Linux x86_64 ==="
 echo
 
-# Creeaza build directory
+# Creare director build
 mkdir -p "$BUILD_DIR"
 
-# Build pentru Linux x86_64
-echo "Building $BINARY_NAME v$VERSION pentru linux/amd64..."
+# Construire pentru Linux x86_64
+echo "Construire $BINARY_NAME v$VERSION pentru linux/amd64..."
 
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
     -ldflags="-s -w" \
@@ -25,10 +23,10 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
     ./cmd/agent
 
 echo
-echo "✓ Build complet!"
+echo "Build complet!"
 echo
 echo "Output: $BUILD_DIR/$BINARY_NAME"
-echo "Size: $(ls -lh "$BUILD_DIR/$BINARY_NAME" | awk '{print $5}')"
+echo "Dimensiune: $(ls -lh "$BUILD_DIR/$BINARY_NAME" | awk '{print $5}')"
 echo
 echo "Pentru a instala pe server Linux:"
 echo "  scp $BUILD_DIR/$BINARY_NAME user@server:/tmp/"

@@ -9,24 +9,26 @@ title Diagrama de Desfasurare - Infrastructura Docker
 
 node "Host Docker" as Host {
     
-    node "frontend:80" as FC #LightBlue {
-        [Nginx + React]
+    node "frontend:5173" as FC #LightBlue {
+        [Nginx + React/Vite]
     }
     
     node "backend:3000" as BC #LightGreen {
         [Express + Prisma]
+        [Socket.IO]
     }
     
     node "postgres:5432" as PC #LightGray {
-        database "PostgreSQL"
+        database "PostgreSQL 15"
     }
     
     storage "postgres_data" as V1
     storage "evidence_files" as V2
+    storage "templates" as V3
 }
 
 node "Server Monitorizat" as Target #LightYellow {
-    [Agent BitTrail]
+    [BitTrail Agent (Go)]
     file "config.yaml"
 }
 
@@ -37,15 +39,15 @@ FC -[hidden]right-> BC
 BC -[hidden]right-> PC
 
 ' Conexiuni interne
-FC --> BC : HTTP
-BC --> PC : TCP
+FC --> BC : HTTP/WS
+BC --> PC : TCP:5432
 PC --> V1 : mount
 BC --> V2 : mount
+BC --> V3 : mount (ro)
 
 ' Conexiuni externe
 Net --> FC : HTTPS:443
-Net --> BC : HTTPS:3000
 Target --> Net : HTTPS
-Net --> BC
+Net --> BC : WS/REST
 
 @enduml

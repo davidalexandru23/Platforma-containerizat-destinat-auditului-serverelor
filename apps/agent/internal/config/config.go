@@ -12,8 +12,8 @@ type Config struct {
 	AgentToken string `yaml:"agent_token"`
 
 	// Intervale colectare
-	MetricsInterval   int `yaml:"metrics_interval"`   // secunde
-	InventoryInterval int `yaml:"inventory_interval"` // secunde
+	MetricsInterval    int `yaml:"metrics_interval"`     // secunde
+	InventoryInterval  int `yaml:"inventory_interval"`   // secunde
 	AuditCheckInterval int `yaml:"audit_check_interval"` // secunde
 }
 

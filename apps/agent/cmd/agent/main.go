@@ -17,21 +17,22 @@ var (
 	enrollToken string
 )
 
-const agentVersion = "1.0.0"
+// Injectare versiune la compilare (-ldflags -X main.agentVersion=...)
+var agentVersion = "dev"
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "bittrail-agent",
 		Short: "Agent pentru platforma BitTrail",
-		Long: `BitTrail Agent - Agent de monitorizare si audit pentru servere Linux.
+		Long: `BitTrail Agent - Monitorizare si audit servere Linux.
 
-Acest agent se instaleaza direct pe server si:
-- Colecteaza metrici de sistem (CPU, RAM, disk, network)
-- Colecteaza inventory (OS, pachete, servicii, porturi, useri)
-- Executa verificari automate din template-urile de audit
-- Comunica securizat cu backend-ul BitTrail
+Acest agent se instaleaza pe server si:
+- Colectare metrici sistem (CPU, RAM, disc, retea)
+- Colectare inventar (SO, pachete, servicii, porturi, utilizatori)
+- Executare verificari automate din sabloane audit
+- Comunicare securizata cu backend BitTrail
 
-Agentul necesita permisiuni root pentru a accesa toate informatiile de sistem.
+Agentul necesita privilegii root pentru accesare informatii complete.
 
 Exemplu utilizare:
   # Inrolare agent
@@ -46,21 +47,21 @@ Exemplu utilizare:
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "/etc/bittrail-agent/config.yaml", "fisier configurare")
 
-	// comanda enroll
+	// Comanda inrolare
 	enrollCmd := &cobra.Command{
 		Use:   "enroll",
-		Short: "Inroleaza agentul pe server",
-		Long: `Inroleaza agentul cu backend-ul BitTrail.
+		Short: "Inrolare agent pe server",
+		Long: `Inrolare agent cu backend BitTrail.
 
-Pasul de enrollment:
-1. Genereaza token din interfata web BitTrail (Servers -> Server -> Enrollment)
-2. Ruleaza comanda enroll cu token-ul generat
-3. Agentul salveaza configuratia si poate fi pornit cu 'run'
+Pasul de inrolare:
+1. Generare token din interfata web BitTrail (Servere -> Server -> Inrolare)
+2. Rulare comanda enroll cu token generat
+3. Salvare configuratie si pornire cu 'run'
 
-Token-ul expira dupa 24 ore sau dupa prima utilizare.`,
+Tokenul expira dupa 24 ore sau dupa prima utilizare.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if os.Geteuid() != 0 {
-				fmt.Println("ATENTIE: Enrollment ca non-root. Unele functii pot fi limitate.")
+				fmt.Println("ATENTIE: Inrolare ca non-root. Unele functionalitati pot fi limitate.")
 			}
 			return enrollment.Enroll(serverURL, enrollToken, cfgFile, agentVersion)
 		},
@@ -71,23 +72,23 @@ Token-ul expira dupa 24 ore sau dupa prima utilizare.`,
 	enrollCmd.MarkFlagRequired("token")
 	rootCmd.AddCommand(enrollCmd)
 
-	// comanda run
+	// Comanda rulare
 	runCmd := &cobra.Command{
 		Use:   "run",
-		Short: "Porneste agentul in mod continuu",
-		Long: `Porneste agentul in mod daemon.
+		Short: "Pornire agent in mod continuu",
+		Long: `Pornire agent in mod daemon.
 
-Agentul va:
-- Trimite metrici la fiecare 10 secunde
-- Actualiza inventory la fiecare ora
-- Verifica si executa checks de audit in asteptare
+Actiuni agent:
+- Trimitere metrici la fiecare 10 secunde
+- Actualizare inventar la fiecare ora
+- Verificare si executare controale audit in asteptare
 
-Pentru productie, foloseste un service systemd:
+Pentru productie, utilizare serviciu systemd:
   sudo systemctl enable bittrail-agent
   sudo systemctl start bittrail-agent`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if os.Geteuid() != 0 {
-				fmt.Println("ATENTIE: Rulare ca non-root. Unele metrici/checks pot fi indisponibile.")
+				fmt.Println("ATENTIE: Rulare ca non-root. Unele metrici/verificari pot fi indisponibile.")
 			}
 			cfg, err := config.Load(cfgFile)
 			if err != nil {
@@ -98,14 +99,14 @@ Pentru productie, foloseste un service systemd:
 	}
 	rootCmd.AddCommand(runCmd)
 
-	// comanda status
+	// Comanda status
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Afiseaza statusul agentului",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(cfgFile)
 			if err != nil {
-				return fmt.Errorf("agent nu este configurat: %w", err)
+				return fmt.Errorf("agent neconfigurat: %w", err)
 			}
 			fmt.Println("=== BitTrail Agent Status ===")
 			fmt.Printf("Version:       %s\n", agentVersion)
@@ -122,20 +123,20 @@ Pentru productie, foloseste un service systemd:
 	}
 	rootCmd.AddCommand(statusCmd)
 
-	// comanda version
+	// Comanda versiune
 	versionCmd := &cobra.Command{
 		Use:   "version",
-		Short: "Afiseaza versiunea agentului",
+		Short: "Afisare versiune agent",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("BitTrail Agent v%s\n", agentVersion)
 		},
 	}
 	rootCmd.AddCommand(versionCmd)
 
-	// comanda test - pt debugging
+	// Comanda testare - pentru depanare
 	testCmd := &cobra.Command{
 		Use:   "test",
-		Short: "Testeaza colectarea de metrici si inventory",
+		Short: "Testare colectare metrici si inventar",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runner.TestCollectors()
 		},

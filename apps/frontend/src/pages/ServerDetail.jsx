@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import api from '../api/client';
 import './ServerDetail.css';
 
@@ -11,7 +12,7 @@ function ServerDetail() {
     const [activeTab, setActiveTab] = useState('overview');
     const [copied, setCopied] = useState(false);
 
-    // state audit
+    // Stare audit
     const [audits, setAudits] = useState([]);
     const [templates, setTemplates] = useState([]);
     const [showAuditModal, setShowAuditModal] = useState(false);
@@ -19,24 +20,123 @@ function ServerDetail() {
     const [runningAudit, setRunningAudit] = useState(false);
     const [auditError, setAuditError] = useState(null);
 
+    // Stare versiune agent
+    const [latestAgentVersion, setLatestAgentVersion] = useState(null);
+
     useEffect(() => {
         loadServer();
         loadAudits();
         loadTemplates();
+        loadLatestAgentVersion();
+
+        // Metrici Live WebSocket
+        const token = localStorage.getItem('accessToken');
+        const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:3000';
+
+        // Socket pentru metrici live
+        const liveSocket = io(`${wsUrl}/ws/live`, {
+            auth: { token },
+            query: { token },
+        });
+
+        liveSocket.on('connect', () => {
+            console.log('Conectat la live metrics stream');
+            liveSocket.emit('subscribe', { serverId: id });
+        });
+
+        liveSocket.emit('server:subscribe', { serverId: id });
+
+        liveSocket.on('server:metrics', (data) => {
+            setServer(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    metrics: { ...(prev.metrics || {}), ...data }
+                };
+            });
+        });
+
+        liveSocket.on('server:heartbeat', (data) => {
+            setServer(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    status: 'ONLINE',
+                    agentIdentity: {
+                        ...(prev.agentIdentity || {}),
+                        version: data.agentVersion,
+                        lastSeen: data.lastSeen
+                    }
+                };
+            });
+        });
+
+        // Socket pentru status server (detectare offline)
+        const serversSocket = io(`${wsUrl}/ws/servers`, {
+            auth: { token },
+            query: { token },
+        });
+
+        serversSocket.on('connect', () => {
+            console.log('Conectat la servers status stream');
+            serversSocket.emit('servers:subscribe');
+        });
+
+        // Ascultare schimbari status server
+        serversSocket.on('servers:status', (data) => {
+            if (data.serverId === id) {
+                setServer(prev => {
+                    if (!prev) return prev;
+                    return { ...prev, status: data.status };
+                });
+            }
+        });
+
+        // Socket pentru status audit
+        const auditSocket = io(`${wsUrl}/ws/audit`, {
+            auth: { token },
+            query: { token },
+        });
+
+        auditSocket.on('connect', () => {
+            console.log('Conectat la audit status stream');
+        });
+
+        // Ascultare schimbari status audituri pentru actualizare lista
+        auditSocket.on('audit:status', (data) => {
+            if (data.serverId === id) {
+                // Reincarcare audituri la schimbarea statusului
+                loadAudits();
+            }
+        });
+
+        return () => {
+            liveSocket.disconnect();
+            serversSocket.disconnect();
+            auditSocket.disconnect();
+        };
+
     }, [id]);
 
     const loadServer = async () => {
         try {
-            const [serverRes, metricsRes, inventoryRes] = await Promise.all([
+            // Preluare server, metrici, inventar si token inrolare
+            const [serverRes, metricsRes, inventoryRes, tokenRes] = await Promise.all([
                 api.get(`/servers/${id}`),
                 api.get(`/servers/${id}/metrics/latest`),
-                api.get(`/servers/${id}/inventory/latest`)
+                api.get(`/servers/${id}/inventory/latest`),
+                api.get(`/servers/${id}/enrollToken`).catch(() => ({ data: { enrollToken: null } }))
             ]);
 
             setServer({
                 ...serverRes.data,
                 metrics: metricsRes.data,
-                inventory: inventoryRes.data
+                inventory: inventoryRes.data,
+                // Adaugare token la identitate agent
+                agentIdentity: {
+                    ...serverRes.data.agentIdentity,
+                    enrollToken: tokenRes.data.enrollToken
+                }
             });
         } catch (error) {
             console.error('Error loading server data:', error);
@@ -63,6 +163,19 @@ function ServerDetail() {
         }
     };
 
+    const loadLatestAgentVersion = async () => {
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+            const response = await fetch(`${apiUrl}/downloads/agent-version.json`);
+            if (response.ok) {
+                const data = await response.json();
+                setLatestAgentVersion(data.version);
+            }
+        } catch (error) {
+            console.error('Error loading agent version:', error);
+        }
+    };
+
     const handleRunAudit = async () => {
         if (!selectedTemplate) return;
 
@@ -74,7 +187,7 @@ function ServerDetail() {
                 templateId: selectedTemplate
             });
             setShowAuditModal(false);
-            // reincarca audituri si redirect
+            // Reincarcare audituri si redirectionare
             loadAudits();
             navigate(`/audit/${response.data.auditRun.id}`);
         } catch (error) {
@@ -90,7 +203,7 @@ function ServerDetail() {
 
         try {
             const response = await api.post(`/servers/${id}/enrollToken`);
-            // update server local cu token nou
+            // Actualizare server local cu token nou
             setServer(prev => ({
                 ...prev,
                 agentIdentity: {
@@ -158,9 +271,20 @@ function ServerDetail() {
     const enrollToken = server.agentIdentity?.enrollToken;
     const enrollCommand = `./bittrail-agent enroll --token ${enrollToken || 'TOKEN'} --server ${window.location.origin}`;
 
+    // Versiune agent si comparatie
+    const installedVersion = server.agentIdentity?.version;
+    const needsUpdate = latestAgentVersion && installedVersion && latestAgentVersion !== installedVersion;
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const updateCommand = `sudo systemctl stop bittrail-agent
+curl -fsSL ${apiUrl}/downloads/bittrail-agent -o /tmp/bittrail-agent
+chmod +x /tmp/bittrail-agent
+sudo mv /tmp/bittrail-agent /usr/local/bin/bittrail-agent
+sudo systemctl start bittrail-agent
+bittrail-agent version`;
+
     return (
         <div className="server-detail-page">
-            {/* Breadcrumbs */}
+            {/* Navigare */}
             <nav className="breadcrumbs">
                 <Link to="/">Dashboard</Link>
                 <span className="separator">/</span>
@@ -169,7 +293,7 @@ function ServerDetail() {
                 <span className="current">{server.hostname}</span>
             </nav>
 
-            {/* Server Header */}
+            {/* Antet Server */}
             <div className="server-header">
                 <div className="server-header-row">
                     <div>
@@ -212,7 +336,7 @@ function ServerDetail() {
                 </div>
             </div>
 
-            {/* Tabs */}
+            {/* Tab-uri */}
             <div className="tabs">
                 <button
                     className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
@@ -240,103 +364,131 @@ function ServerDetail() {
                 </button>
             </div>
 
-            {/* Tab Content */}
+            {/* Continut Tab */}
             <div className="tab-content">
                 {activeTab === 'overview' && (
-                    <div className="metrics-grid">
-                        {/* Metrics content same as before but ensured safety access */}
-                        <div className="metric-card">
-                            <div className="metric-header">
-                                <div>
-                                    <p className="metric-label">CPU Load</p>
-                                    <h3 className="metric-value">
-                                        {server.metrics?.cpuPercent?.toFixed(1) || '0'}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>%</span>
-                                    </h3>
-                                </div>
-                                <span className="metric-change positive">
-                                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_down</span>
-                                    Stabil
+                    <>
+                        {/* Afisare mesaj daca serverul este offline */}
+                        {!isActive && (
+                            <div className="card" style={{
+                                padding: '2rem',
+                                textAlign: 'center',
+                                background: 'var(--bg-light)',
+                                marginBottom: '1.5rem'
+                            }}>
+                                <span className="material-symbols-outlined" style={{
+                                    fontSize: '48px',
+                                    color: 'var(--danger)',
+                                    marginBottom: '1rem',
+                                    display: 'block'
+                                }}>
+                                    cloud_off
                                 </span>
+                                <h3 style={{ marginBottom: '0.5rem' }}>Server Offline</h3>
+                                <p style={{ color: 'var(--text-muted)' }}>
+                                    Agentul nu mai trimite metrici. Verifica conexiunea sau reporneste agentul.
+                                </p>
                             </div>
-                            <div className="metric-chart">
-                                <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
-                                    <div
-                                        className="progress-bar progress-bar-primary"
-                                        style={{ width: `${server.metrics?.cpuPercent || 0}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-                        </div>
+                        )}
 
-                        <div className="metric-card">
-                            <div className="metric-header">
-                                <div>
-                                    <p className="metric-label">Memorie</p>
-                                    <h3 className="metric-value">
-                                        {((server.metrics?.memUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(1)}
-                                        <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>GB</span>
-                                    </h3>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                        din {((server.metrics?.memTotalBytes || 0) / 1024 / 1024 / 1024).toFixed(0)}GB
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="metric-chart">
-                                <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
-                                    <div
-                                        className="progress-bar progress-bar-warning"
-                                        style={{ width: `${(Number(server.metrics?.memUsedBytes || 0) / Number(server.metrics?.memTotalBytes || 1)) * 100}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="metric-card">
-                            <div className="metric-header">
-                                <div>
-                                    <p className="metric-label">Disk I/O</p>
-                                    <h3 className="metric-value">
-                                        {((server.metrics?.diskUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(1)}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>GB</span>
-                                    </h3>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                        Used
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="metric-chart">
-                                <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
-                                    <div
-                                        className="progress-bar progress-bar-primary"
-                                        style={{ width: `${(Number(server.metrics?.diskUsedBytes || 0) / Number(server.metrics?.diskTotalBytes || 1)) * 100}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="metric-card">
-                            <div className="metric-header">
-                                <div>
-                                    <p className="metric-label">Network</p>
-                                    <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem' }}>
+                        {/* Afisare metrici doar daca serverul este online */}
+                        {isActive && (
+                            <div className="metrics-grid">
+                                {/* Continut metrici (acces sigur) */}
+                                <div className="metric-card">
+                                    <div className="metric-header">
                                         <div>
-                                            <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>In</span>
-                                            <p style={{ fontSize: '1.125rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                                                {((server.metrics?.netInBytes || 0) / 1024 / 1024).toFixed(1)}
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mb</span>
+                                            <p className="metric-label">CPU Load</p>
+                                            <h3 className="metric-value">
+                                                {server.metrics?.cpuPercent?.toFixed(1) || '0'}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>%</span>
+                                            </h3>
+                                        </div>
+                                        <span className="metric-change positive">
+                                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_down</span>
+                                            Stabil
+                                        </span>
+                                    </div>
+                                    <div className="metric-chart">
+                                        <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
+                                            <div
+                                                className="progress-bar progress-bar-primary"
+                                                style={{ width: `${server.metrics?.cpuPercent || 0}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="metric-card">
+                                    <div className="metric-header">
+                                        <div>
+                                            <p className="metric-label">Memorie</p>
+                                            <h3 className="metric-value">
+                                                {((server.metrics?.memUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(1)}
+                                                <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>GB</span>
+                                            </h3>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                din {((server.metrics?.memTotalBytes || 0) / 1024 / 1024 / 1024).toFixed(0)}GB
                                             </p>
                                         </div>
+                                    </div>
+                                    <div className="metric-chart">
+                                        <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
+                                            <div
+                                                className="progress-bar progress-bar-warning"
+                                                style={{ width: `${(Number(server.metrics?.memUsedBytes || 0) / Number(server.metrics?.memTotalBytes || 1)) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="metric-card">
+                                    <div className="metric-header">
                                         <div>
-                                            <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Out</span>
-                                            <p style={{ fontSize: '1.125rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                                                {((server.metrics?.netOutBytes || 0) / 1024 / 1024).toFixed(1)}
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mb</span>
+                                            <p className="metric-label">Disk I/O</p>
+                                            <h3 className="metric-value">
+                                                {((server.metrics?.diskUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(1)}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>GB</span>
+                                            </h3>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                Used
                                             </p>
+                                        </div>
+                                    </div>
+                                    <div className="metric-chart">
+                                        <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
+                                            <div
+                                                className="progress-bar progress-bar-primary"
+                                                style={{ width: `${(Number(server.metrics?.diskUsedBytes || 0) / Number(server.metrics?.diskTotalBytes || 1)) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="metric-card">
+                                    <div className="metric-header">
+                                        <div>
+                                            <p className="metric-label">Network</p>
+                                            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem' }}>
+                                                <div>
+                                                    <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>In</span>
+                                                    <p style={{ fontSize: '1.125rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                                        {((server.metrics?.netInBytes || 0) / 1024 / 1024).toFixed(1)}
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mb</span>
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Out</span>
+                                                    <p style={{ fontSize: '1.125rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                                        {((server.metrics?.netOutBytes || 0) / 1024 / 1024).toFixed(1)}
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mb</span>
+                                                    </p>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
+                        )}
+                    </>
                 )}
 
                 {activeTab === 'audits' && (
@@ -412,7 +564,7 @@ function ServerDetail() {
 
                 {activeTab === 'inventory' && (
                     <div className="inventory-section">
-                        {/* Simplified Inventory for brevity, assuming standard blocks */}
+                        {/* Inventar simplificat */}
                         {server.inventory?.osInfo && (
                             <div className="inventory-card">
                                 <div className="inventory-card-header">
@@ -439,6 +591,32 @@ function ServerDetail() {
 
                 {activeTab === 'enrollment' && (
                     <div className="enrollment-section">
+                        {/* Versiune Agent */}
+                        <div className="enrollment-card">
+                            <h3>Versiune Agent</h3>
+                            <div style={{ display: 'flex', gap: '2rem', marginTop: '1rem' }}>
+                                <div>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Instalat</span>
+                                    <p style={{ fontSize: '1.25rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                                        {installedVersion || 'N/A'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Disponibil</span>
+                                    <p style={{ fontSize: '1.25rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                                        {latestAgentVersion || 'N/A'}
+                                    </p>
+                                </div>
+                            </div>
+                            {needsUpdate && (
+                                <div className="alert alert-warning" style={{ marginTop: '1rem' }}>
+                                    <span className="material-symbols-outlined">update</span>
+                                    <span>O versiune noua a agentului este disponibila! ({installedVersion} → {latestAgentVersion})</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Token Inrolare */}
                         <div className="enrollment-card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                 <h3>Token Enrollment</h3>
@@ -457,8 +635,13 @@ function ServerDetail() {
                                 Regenerarea va invalida vechiul token. Foloseste-l doar pentru instalari noi.
                             </p>
                         </div>
+
+                        {/* Comanda Inrolare (pentru instalare noua) */}
                         <div className="enrollment-card">
-                            <h3>Comanda</h3>
+                            <h3>Comanda Enroll</h3>
+                            <p className="helper-text" style={{ marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                Pentru instalare noua pe server:
+                            </p>
                             <div className="code-block">
                                 <code>{enrollCommand}</code>
                                 <button className="copy-btn" onClick={() => copyToClipboard(enrollCommand)}>
@@ -466,11 +649,27 @@ function ServerDetail() {
                                 </button>
                             </div>
                         </div>
+
+                        {/* Comenzi Actualizare (doar daca exista actualizare) */}
+                        {needsUpdate && (
+                            <div className="enrollment-card" style={{ borderColor: 'var(--warning)' }}>
+                                <h3>Comenzi Update Agent</h3>
+                                <p className="helper-text" style={{ marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                    Ruleaza pe server pentru a actualiza agentul:
+                                </p>
+                                <div className="code-block" style={{ whiteSpace: 'pre-wrap' }}>
+                                    <code>{updateCommand}</code>
+                                    <button className="copy-btn" onClick={() => copyToClipboard(updateCommand)}>
+                                        <span className="material-symbols-outlined">content_copy</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
 
-            {/* Start Audit Modal */}
+            {/* Modala Pornire Audit */}
             {showAuditModal && (
                 <div className="modal-overlay">
                     <div className="modal">

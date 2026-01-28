@@ -8,7 +8,7 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // check daca exista token salvat
+        // Verificare daca exista token salvat
         const token = localStorage.getItem('accessToken');
         const savedUser = localStorage.getItem('user');
 
@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
         try {
             await authApi.logout();
         } catch (e) {
-            // ignora erori la logout
+            // Ignorare erori la deconectare
         }
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');

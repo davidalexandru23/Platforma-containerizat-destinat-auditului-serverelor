@@ -1,5 +1,5 @@
 #!/bin/bash
-# BitTrail Agent - Script instalare pe server Linux x86_64
+# BitTrail Agent - Script instalare pe server Linux
 # Copiaza acest script si binarul pe server, apoi ruleaza: sudo ./install.sh
 
 set -e
@@ -9,18 +9,15 @@ INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/bittrail-agent"
 SERVICE_FILE="/etc/systemd/system/bittrail-agent.service"
 
-echo "╔══════════════════════════════════════════════════╗"
-echo "║       BitTrail Agent - Instalare Linux x86_64    ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo
+echo ""
 
-# Verifica root
+# Verificare privilegii root
 if [ "$EUID" -ne 0 ]; then
     echo "EROARE: Ruleaza ca root: sudo ./install.sh"
     exit 1
 fi
 
-# Verifica arhitectura
+# Verificare arhitectura sistem
 ARCH=$(uname -m)
 if [ "$ARCH" != "x86_64" ]; then
     echo "ATENTIE: Acest script este pentru x86_64, detectat: $ARCH"
@@ -48,7 +45,7 @@ mkdir -p "$CONFIG_DIR"
 chmod 755 "$CONFIG_DIR"
 echo "  Creat: $CONFIG_DIR"
 
-echo "[4/4] Creare service systemd..."
+echo "[4/4] Creare fisier serviciu systemd..."
 cat > "$SERVICE_FILE" << 'EOF'
 [Unit]
 Description=BitTrail Agent - Server Monitoring and Audit
@@ -62,17 +59,17 @@ ExecStart=/usr/local/bin/bittrail-agent run
 Restart=always
 RestartSec=10
 
-# Logging
+# Logare
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=bittrail-agent
 
-# Permisiuni - agentul are nevoie de acces la sistem
-# Nu restrictionam pentru a permite colectarea completa
+# Permisiuni - agentul necesita acces complet la sistem
+# Nerespunzator restrictionare
 User=root
 Group=root
 
-# Environment
+# Variabile mediu
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [Install]
@@ -82,24 +79,20 @@ EOF
 systemctl daemon-reload
 echo "  Creat: $SERVICE_FILE"
 
-echo
-echo "╔══════════════════════════════════════════════════╗"
-echo "║           ✓ Instalare completa!                  ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo
+echo ""
+echo "Instalare completa!"
+echo ""
 echo "PASUL URMATOR - Inroleaza agentul:"
-echo
-echo "  sudo $BINARY_NAME enroll \\"
-echo "    --server https://BITTRAIL_SERVER_URL \\"
-echo "    --token TOKEN_DIN_INTERFATA_WEB"
-echo
+echo ""
+echo "  sudo $BINARY_NAME enroll --server https://BITTRAIL_SERVER_URL --token TOKEN_DIN_INTERFATA_WEB"
+echo ""
 echo "Apoi porneste serviciul:"
-echo
+echo ""
 echo "  sudo systemctl enable bittrail-agent"
 echo "  sudo systemctl start bittrail-agent"
-echo
+echo ""
 echo "Verifica status:"
-echo
+echo ""
 echo "  sudo systemctl status bittrail-agent"
 echo "  sudo journalctl -u bittrail-agent -f"
-echo
+

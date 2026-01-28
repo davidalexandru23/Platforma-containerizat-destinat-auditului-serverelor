@@ -2,27 +2,31 @@
   "name": "bittrail-backend",
   "version": "1.0.0",
   "description": "Backend API pentru platforma de audit servere",
+  "type": "module",
   "main": "src/main.js",
   "scripts": {
     "start": "node src/main.js",
     "start:dev": "nodemon src/main.js",
     "lint": "eslint src/**/*.js",
     "test": "jest",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:generate": "prisma generate --config=prisma.config.ts",
+    "prisma:migrate": "prisma migrate dev --config=prisma.config.ts",
+    "prisma:studio": "prisma studio --config=prisma.config.ts",
+    "prisma:push": "prisma db push --config=prisma.config.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.8.0",
+    "@prisma/adapter-pg": "^7.0.0",
+    "@prisma/client": "^7.0.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.6.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "pg": "^8.11.0",
     "socket.io": "^4.7.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
@@ -32,8 +36,9 @@
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
-    "prisma": "^5.8.0",
-    "supertest": "^6.3.4"
+    "prisma": "^7.0.0",
+    "supertest": "^6.3.4",
+    "tsx": "^4.7.0"
   },
   "engines": {
     "node": ">=18.0.0"

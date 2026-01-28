@@ -1,14 +1,15 @@
-const express = require('express');
+import express from 'express';
+import * as usersService from '../services/users.service.js';
+import { authenticate, authorize } from '../middleware/auth.middleware.js';
+
 const router = express.Router();
-const usersService = require('../services/users.service');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 /**
  * @swagger
  * /users:
  *   get:
  *     tags: [Users]
- *     summary: Lista toti userii (admin only)
+ *     summary: Lista toti utilizatorii (doar admin)
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/',
@@ -29,7 +30,7 @@ router.get('/',
  * /users:
  *   post:
  *     tags: [Users]
- *     summary: Creeaza user nou (admin only)
+ *     summary: Creare utilizator nou (doar admin)
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/',
@@ -79,7 +80,7 @@ router.get('/roles',
  * /users/{id}:
  *   get:
  *     tags: [Users]
- *     summary: Detalii user
+ *     summary: Detalii utilizator
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id',
@@ -100,7 +101,7 @@ router.get('/:id',
  * /users/{id}/role:
  *   patch:
  *     tags: [Users]
- *     summary: Schimba rolul unui user
+ *     summary: Schimbare rol utilizator
  *     security: [{ bearerAuth: [] }]
  */
 router.patch('/:id/role',
@@ -121,7 +122,7 @@ router.patch('/:id/role',
  * /users/{id}:
  *   delete:
  *     tags: [Users]
- *     summary: Sterge user
+ *     summary: Stergere utilizator
  *     security: [{ bearerAuth: [] }]
  */
 router.delete('/:id',
@@ -142,7 +143,7 @@ router.delete('/:id',
  * /users/me/password:
  *   post:
  *     tags: [Users]
- *     summary: Schimba parola utilizatorului autentificat
+ *     summary: Schimbare parola utilizator autentificat
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -177,4 +178,4 @@ router.post('/me/password',
     }
 );
 
-module.exports = router;
+export default router;

@@ -14,7 +14,7 @@ function GlobalSearch() {
     const dropdownRef = useRef(null);
     const navigate = useNavigate();
 
-    // Static pages for search
+    // Pagini statice pentru cautare
     const staticPages = [
         { name: 'Dashboard', path: '/', icon: 'dashboard', keywords: ['dashboard', 'acasa', 'home', 'principal'] },
         { name: 'Servere', path: '/servers', icon: 'dns', keywords: ['servere', 'servers', 'noduri', 'masini'] },
@@ -27,7 +27,7 @@ function GlobalSearch() {
 
 
 
-    // Debounced search
+    // Cautare optimizata (debounce)
     useEffect(() => {
         if (!query.trim()) {
             setResults({ servers: [], templates: [], pages: [] });
@@ -42,7 +42,7 @@ function GlobalSearch() {
         return () => clearTimeout(timer);
     }, [query]);
 
-    // Click outside to close
+    // Inchidere la click in afara
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target) &&
@@ -59,14 +59,14 @@ function GlobalSearch() {
         setLoading(true);
 
         try {
-            // Search static pages
+            // Cautare pagini statice
             const matchedPages = staticPages.filter(page => {
                 if (page.adminOnly && user?.role !== 'ADMIN') return false;
                 return page.name.toLowerCase().includes(q) ||
                     page.keywords.some(kw => kw.includes(q));
             });
 
-            // Search servers from API
+            // Cautare servere din API
             let matchedServers = [];
             try {
                 const serversRes = await api.get('/servers');
@@ -80,7 +80,7 @@ function GlobalSearch() {
                 console.log('Could not search servers');
             }
 
-            // Search templates from API
+            // Cautare template-uri din API
             let matchedTemplates = [];
             try {
                 const templatesRes = await api.get('/templates');

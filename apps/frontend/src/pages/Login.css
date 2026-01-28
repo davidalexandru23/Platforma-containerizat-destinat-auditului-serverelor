@@ -5,21 +5,12 @@
     align-items: center;
     justify-content: center;
     padding: 2rem;
-    background: var(--bg-light);
+    /* Vignette gradient: Center #e8e8e8 -> Edges mixed with #2bbdca (0.25 opacity for visibility) */
+    background: radial-gradient(circle at center, #e8e8e8 0%, rgba(43, 189, 202, 0.25) 100%);
     position: relative;
 }
 
-.login-page::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-        linear-gradient(rgba(43, 189, 202, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(43, 189, 202, 0.05) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-}
+
 
 .login-card {
     width: 100%;

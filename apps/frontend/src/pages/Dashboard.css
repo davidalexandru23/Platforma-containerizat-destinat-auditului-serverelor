@@ -1,0 +1,32 @@
+.dashboard-grid {
+    display: block;
+    /* Removed grid since sidebar is gone */
+    /* grid-template-columns: 1fr; */
+    gap: 24px;
+    height: calc(100vh - 180px);
+    /* Adjust based on header height */
+    overflow: hidden;
+}
+
+.dashboard-main {
+    overflow-y: auto;
+    padding-bottom: 24px;
+}
+
+.dashboard-sidebar {
+    height: 100%;
+    overflow: hidden;
+}
+
+@media (max-width: 1200px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+    }
+
+    .dashboard-sidebar {
+        height: 500px;
+        /* Fixed height on mobile */
+    }
+}

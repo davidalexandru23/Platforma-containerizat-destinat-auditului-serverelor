@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import api from '../api/client';
 import './Servers.css';
 
@@ -14,6 +15,40 @@ function Servers() {
 
     useEffect(() => {
         loadServers();
+
+        // WebSocket pentru actualizari in timp real
+        const token = localStorage.getItem('accessToken');
+        const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:3000';
+
+        const socket = io(`${wsUrl}/ws/servers`, {
+            auth: { token },
+            query: { token },
+        });
+
+        socket.on('connect', () => {
+            console.log('Connected to servers stream');
+        });
+
+        socket.on('servers:status', (data) => {
+            setServers(prev => prev.map(server => {
+                if (server.id === data.serverId) {
+                    return {
+                        ...server,
+                        status: data.status,
+                        riskLevel: data.riskLevel,
+                        agentIdentity: {
+                            ...(server.agentIdentity || {}),
+                            lastSeen: data.timestamp
+                        }
+                    };
+                }
+                return server;
+            }));
+        });
+
+        return () => {
+            socket.disconnect();
+        };
     }, []);
 
     const loadServers = async () => {
@@ -56,7 +91,7 @@ function Servers() {
     const getFilteredAndSortedServers = () => {
         let result = servers;
 
-        // 1. Status Filter
+        // 1. Filtru Status
         if (filter === 'online') {
             result = result.filter(s => s.status === 'online' || s.status === 'ONLINE');
         } else if (filter === 'offline') {
@@ -65,7 +100,7 @@ function Servers() {
 
 
 
-        // 3. Risk Sort
+        // 3. Sortare Risc
         if (riskSort !== 'none') {
             result = [...result].sort((a, b) => {
                 const valA = getRiskValue(a.riskLevel);
@@ -97,31 +132,35 @@ function Servers() {
     };
 
     const getRiskBadge = (server) => {
-        const risk = server.riskLevel || 'low';
-        // ... (rest of badge logic)
+        const risk = server.riskLevel || 'unknown';
+
         const classes = {
             critical: 'badge badge-danger',
             high: 'badge badge-warning',
             medium: 'badge badge-info',
-            low: 'badge badge-success'
+            low: 'badge badge-success',
+            unknown: 'badge badge-neutral'
         };
+
         const labels = {
             critical: 'Critical',
             high: 'High',
             medium: 'Medium',
-            low: 'Low'
+            low: 'Low',
+            unknown: 'Unknown'
         };
+
         return (
-            <span className={classes[risk] || classes.low}>
+            <span className={classes[risk] || classes.unknown}>
                 <span className="status-dot"></span>
-                {labels[risk] || 'Low'}
+                {labels[risk] || 'Unknown'}
             </span>
         );
     };
 
     return (
         <div className="servers-page">
-            {/* Page Header */}
+            {/* Antet Pagina */}
             <div className="page-header">
                 <div className="page-header-row">
                     <div>
@@ -137,7 +176,7 @@ function Servers() {
                 </div>
             </div>
 
-            {/* Filters Toolbar */}
+            {/* Bara Unelte Filtre */}
             <div className="filters-toolbar">
                 <div className="segmented-control">
                     <button
@@ -176,7 +215,7 @@ function Servers() {
                 </div>
             </div>
 
-            {/* Servers Table */}
+            {/* Tabel Servere */}
             <div className="table-container">
                 {loading ? (
                     <div className="empty-state">
@@ -203,7 +242,7 @@ function Servers() {
                                 <tr>
                                     <th style={{ width: '64px' }}>Status</th>
                                     <th>Server Info</th>
-                                    <th>Tag-uri</th>
+                                    <th style={{ display: 'none' }}>Tag-uri</th>
                                     <th>Ultima Activitate</th>
                                     <th>Nivel Risc</th>
                                     <th style={{ width: '120px', textAlign: 'right' }}>Actiuni</th>
@@ -219,11 +258,11 @@ function Servers() {
                                         </td>
                                         <td>
                                             <div className="server-info">
-                                                <span className="server-name">{server.hostname}</span>
+                                                <Link to={`/servers/${server.id}`} className="server-name hover-link">{server.hostname}</Link>
                                                 <span className="server-ip">{server.ip || server.ipAddress || 'N/A'}</span>
                                             </div>
                                         </td>
-                                        <td>
+                                        <td style={{ display: 'none' }}>
                                             <div className="tags-list">
                                                 {server.tags?.map((tag, i) => (
                                                     <span key={i} className={`tag ${tag.toLowerCase()}`}>{tag}</span>
@@ -257,7 +296,7 @@ function Servers() {
                             </tbody>
                         </table>
 
-                        {/* Pagination */}
+                        {/* Paginare */}
                         <div className="pagination">
                             <span className="pagination-info">
                                 Afisare 1-{filteredServers.length} din {filteredServers.length} servere
@@ -267,7 +306,7 @@ function Servers() {
                 )}
             </div>
 
-            {/* Add Server Modal */}
+            {/* Modala Adaugare Server */}
             {showAddModal && (
                 <AddServerModal
                     onClose={() => setShowAddModal(false)}
@@ -279,7 +318,7 @@ function Servers() {
                 />
             )}
 
-            {/* Token Display Modal */}
+            {/* Modala Afisare Token */}
             {enrollmentToken && (
                 <div className="modal-overlay" onClick={() => setEnrollmentToken(null)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
@@ -328,7 +367,7 @@ function Servers() {
     );
 }
 
-// Add Server Modal Component
+// Componenta Modala Adaugare Server
 function AddServerModal({ onClose, onSuccess }) {
     const [hostname, setHostname] = useState('');
     const [loading, setLoading] = useState(false);
@@ -341,10 +380,10 @@ function AddServerModal({ onClose, onSuccess }) {
 
         try {
             const res = await api.post('/servers', { name: hostname, hostname });
-            // Assuming the backend returns the full server object including enrollmentToken
-            // or we might need to fetch it separately if it's not in the response.
-            // Based on typical implementation, create returns the created object.
-            // Let's check if the response has the token directly or inside the server object.
+            // Presupunand ca backend-ul returneaza obiectul server complet inclusiv enrollmentToken
+            // sau s-ar putea sa trebuiasca sa il preluam separat daca nu este in raspuns.
+            // Bazat pe implementarea tipica, creare returneaza obiectul creat.
+            // Sa verificam daca raspunsul are token-ul direct sau in interiorul obiectului server.
             const token = res.data.enrollmentToken || 'TOKEN-NOT-RETURNED-CHECK-BACKEND';
             onSuccess(token);
         } catch (err) {

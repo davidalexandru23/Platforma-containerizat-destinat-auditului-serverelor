@@ -1,20 +1,21 @@
-const express = require('express');
+import express from 'express';
+import * as agentService from '../services/agent.service.js';
+import { agentLimiter } from '../middleware/rate-limit.middleware.js';
+import { body, validationResult } from 'express-validator';
+
 const router = express.Router();
-const agentService = require('../services/agent.service');
-const { agentLimiter } = require('../middleware/rate-limit.middleware');
-const { body, validationResult } = require('express-validator');
 
 /**
  * @swagger
  * /agent/enroll:
  *   post:
  *     tags: [Agent]
- *     summary: Enrollment agent pe server
+ *     summary: Inregistrare agent pe server
  */
 router.post('/enroll',
     agentLimiter,
     [
-        body('enrollToken').notEmpty().withMessage('Enroll token obligatoriu'),
+        body('enrollToken').notEmpty().withMessage('Token inregistrare obligatoriu'),
         body('version').optional().isString(),
         body('osInfo').optional().isString(),
     ],
@@ -38,14 +39,14 @@ router.post('/enroll',
  * /agent/{serverId}/metrics:
  *   post:
  *     tags: [Agent]
- *     summary: Upload metrici de la agent
+ *     summary: Incarcare metrici de la agent
  */
 router.post('/:serverId/metrics',
     agentLimiter,
     async (req, res, next) => {
         try {
             const agentToken = req.headers['x-agent-token'];
-            // Extract IP (handle proxy headers if needed, but req.ip is a good start)
+            // Extragere IP (gestioneaza header-ele proxy daca este necesar, dar req.ip este un inceput bun)
             const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
             const result = await agentService.submitMetrics(req.params.serverId, req.body, agentToken, ipAddress);
             res.json(result);
@@ -60,7 +61,7 @@ router.post('/:serverId/metrics',
  * /agent/{serverId}/inventory:
  *   post:
  *     tags: [Agent]
- *     summary: Upload inventory snapshot de la agent
+ *     summary: Incarcare snapshot inventar de la agent
  */
 router.post('/:serverId/inventory',
     agentLimiter,
@@ -80,7 +81,7 @@ router.post('/:serverId/inventory',
  * /agent/{serverId}/audit/{auditRunId}/results:
  *   post:
  *     tags: [Agent]
- *     summary: Upload rezultate check-uri de la agent
+ *     summary: Incarcare rezultate verificari de la agent
  */
 router.post('/:serverId/audit/:auditRunId/results',
     agentLimiter,
@@ -105,7 +106,7 @@ router.post('/:serverId/audit/:auditRunId/results',
  * /agent/{serverId}/audit/pending:
  *   get:
  *     tags: [Agent]
- *     summary: Obtine checks de rulat pentru audit-uri active
+ *     summary: Obtinere verificari de rulat pentru audit-uri active
  */
 router.get('/:serverId/audit/pending',
     async (req, res, next) => {
@@ -119,4 +120,4 @@ router.get('/:serverId/audit/pending',
     }
 );
 
-module.exports = router;
+export default router;

@@ -1,0 +1,160 @@
+.toast-container {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+    /* Allow clicks to pass through container */
+}
+
+.toast {
+    display: flex;
+    align-items: flex-start;
+    width: 380px;
+    padding: 16px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    /* iOS/shadcn rounded style */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    pointer-events: auto;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast.slide-in {
+    animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+/* Types */
+.toast-success {
+    border-left: 4px solid var(--success-color);
+}
+
+.toast-error {
+    border-left: 4px solid var(--danger-color);
+}
+
+.toast-warning {
+    border-left: 4px solid var(--warning-color);
+}
+
+.toast-info {
+    border-left: 4px solid var(--primary-color);
+}
+
+/* Icons */
+.toast-icon {
+    margin-right: 12px;
+    display: flex;
+    align-items: center;
+    padding-top: 2px;
+}
+
+.toast-success .toast-icon {
+    color: var(--success-color);
+}
+
+.toast-error .toast-icon {
+    color: var(--danger-color);
+}
+
+.toast-warning .toast-icon {
+    color: var(--warning-color);
+}
+
+.toast-info .toast-icon {
+    color: var(--primary-color);
+}
+
+/* Content */
+.toast-content {
+    flex: 1;
+}
+
+.toast-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+}
+
+.toast-message {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.toast-link {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.toast-link:hover {
+    text-decoration: underline;
+}
+
+/* Close Button */
+.toast-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin-left: 8px;
+    transition: color 0.2s;
+}
+
+.toast-close:hover {
+    color: var(--text-primary);
+}
+
+/* Progress Bar Animation */
+.toast-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(0, 0, 0, 0.1);
+    width: 100%;
+    animation: progress 5s linear forwards;
+}
+
+.toast-success .toast-progress {
+    background: var(--success-color);
+}
+
+.toast-error .toast-progress {
+    background: var(--danger-color);
+}
+
+@keyframes progress {
+    from {
+        width: 100%;
+    }
+
+    to {
+        width: 0%;
+    }
+}

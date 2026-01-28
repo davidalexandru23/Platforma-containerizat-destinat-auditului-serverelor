@@ -20,12 +20,14 @@ RUN apk add --no-cache openssl python3 make g++
 # Copy package files
 COPY apps/backend/package*.json ./
 COPY apps/backend/prisma ./prisma/
+COPY apps/backend/prisma.config.ts ./
 
 # Install dependencies
 RUN npm install
 
-# Generate Prisma Client
-RUN npx prisma generate
+# Generate Prisma Client (Prisma 7 with config file)
+# We need a dummy DATABASE_URL for generation to succeed
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate --config=prisma.config.ts
 
 # Copy source code
 COPY apps/backend .
@@ -43,4 +45,4 @@ RUN mkdir -p uploads/evidence
 ENV NODE_ENV=production
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["/bin/sh", "-c", "npx prisma db push --config=prisma.config.ts && npm start"]

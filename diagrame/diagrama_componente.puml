@@ -9,26 +9,32 @@ skinparam ranksep 40
 
 title Diagrama de Componente - Arhitectura Modulelor
 
-rectangle "Frontend (React)" as FE #LightBlue {
+rectangle "Frontend (React + Vite)" as FE #LightBlue {
     [Aplicatie SPA] as App
-    [Context Auth] as Ctx
+    [Router] as Router
+    [AuthContext] as Ctx
+    [Pagini] as Pages
+    [Componente] as Comps
     [Client API] as ApiC
-    [Client WS] as WsC
+    [Hooks] as Hooks
 }
 
-rectangle "Backend (Express)" as BE #LightGreen {
+rectangle "Backend (Express + Node.js)" as BE #LightGreen {
     [Server HTTP] as HTTP
+    [Socket.IO] as WsSrv
     [Middleware] as MW
     [Rute API] as Routes
     [Servicii] as Svc
-    [WebSocket] as WsSrv
-    [Prisma] as ORM
+    [Prisma ORM] as ORM
 }
 
 rectangle "Agent (Go)" as AG #LightYellow {
     [CLI] as CLI
-    [Colector] as Col
-    [Executor] as Exec
+    [Enrollment] as Enroll
+    [Runner] as Runner
+    [MetricsCollector] as MetCol
+    [InventoryCollector] as InvCol
+    [AuditRunner] as AuditRun
 }
 
 database "PostgreSQL" as DB #LightGray
@@ -37,25 +43,34 @@ database "PostgreSQL" as DB #LightGray
 FE -[hidden]right-> BE
 BE -[hidden]right-> AG
 
-' Conexiuni
+' Conexiuni Frontend
+App --> Router
 App --> Ctx
-App --> ApiC
-App --> WsC
+Router --> Pages
+Pages --> Comps
+Comps --> ApiC
+Comps --> Hooks
 
+' Conexiuni Backend
 HTTP --> MW
 MW --> Routes
 Routes --> Svc
 Svc --> ORM
 WsSrv --> Svc
 
+' Conexiuni externe
 ApiC --> HTTP : REST
-WsC --> WsSrv : WS
+Comps ..> WsSrv : WebSocket
 
 ORM --> DB : TCP
 
-CLI --> Col
-CLI --> Exec
-Col --> HTTP : REST
-Exec --> HTTP : REST
+' Conexiuni Agent
+CLI --> Enroll
+CLI --> Runner
+Runner --> MetCol
+Runner --> InvCol
+Runner --> AuditRun
+Enroll --> HTTP : REST
+Runner --> HTTP : REST
 
 @enduml

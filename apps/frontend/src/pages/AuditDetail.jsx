@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { auditApi } from '../api/audit';
+import { io } from 'socket.io-client';
 import './AuditDetail.css';
 
 function AuditDetail() {
@@ -14,11 +15,70 @@ function AuditDetail() {
 
     useEffect(() => {
         loadAudit();
+
+        // Configurare Socket IO
+        const token = localStorage.getItem('token');
+        const socket = io(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/ws/audit`, {
+            transports: ['websocket'],
+            query: { token: token }
+        });
+
+        socket.on('connect', () => {
+            console.log('Connected to audit websocket');
+            socket.emit('subscribe', { auditRunId: id });
+        });
+
+        socket.on('checkResult', (data) => {
+            // Optional: actualizare in timp real, momentan doar jurnalizare
+            console.log('New result:', data);
+            // S-ar putea declansa actualizare partiala aici daca este necesar
+        });
+
+        socket.on('progress', (data) => {
+            if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+                console.log('Audit finished, reloading...', data.status);
+                loadAudit();
+            }
+        });
+
+        // Plan de rezerva: ascultare eveniment schimbare status daca backend-ul il trimite
+        socket.on('statusChange', (data) => {
+            if (data.status === 'COMPLETED') {
+                loadAudit();
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
     }, [id]);
+
+    // Fallback polling: daca ruleaza, verificare la fiecare 2 secunde
+    useEffect(() => {
+        let interval;
+        if (audit && (audit.status === 'RUNNING' || audit.status === 'PENDING')) {
+            interval = setInterval(() => {
+                // Actualizare silentioasa (fundal)
+                auditApi.getById(id).then(data => {
+                    if (data.status !== audit.status) {
+                        setAudit(data);
+                    }
+                    if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+                        clearInterval(interval);
+                    }
+                }).catch(console.error);
+            }, 2000);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [audit, id]);
 
     const loadAudit = async () => {
         try {
-            setLoading(true);
+            // Nu setam loading pe true la actualizari in fundal pentru a evita palpairea UI
+            if (!audit) setLoading(true);
+
             const data = await auditApi.getById(id);
             setAudit(data);
         } catch (err) {
@@ -45,7 +105,7 @@ function AuditDetail() {
             const pageWidth = doc.internal.pageSize.getWidth();
             let y = 20;
 
-            // header
+            // antet
             doc.setFontSize(20);
             doc.setTextColor(14, 116, 144); // #0e7490
             doc.text('Raport Audit de Securitate', pageWidth / 2, y, { align: 'center' });
@@ -60,7 +120,7 @@ function AuditDetail() {
             doc.text(`Data: ${new Date(audit.createdAt).toLocaleString('ro-RO')}`, pageWidth / 2, y, { align: 'center' });
             y += 15;
 
-            // score cards
+            // carduri scor
             const cardWidth = 45;
             const cardStartX = (pageWidth - cardWidth * 4 - 15) / 2;
 
@@ -90,7 +150,7 @@ function AuditDetail() {
             doc.text(`Detalii Verificari (${totalChecks} total)`, 15, y);
             y += 8;
 
-            // header tabel
+            // antet tabel
             doc.setFillColor(243, 244, 246); // #f3f4f6
             doc.rect(15, y, pageWidth - 30, 8, 'F');
             doc.setFontSize(9);
@@ -111,7 +171,7 @@ function AuditDetail() {
 
                 const rowHeight = 7;
 
-                // background alternativ
+                // fundal alternativ
                 if (i % 2 === 0) {
                     doc.setFillColor(249, 250, 251);
                     doc.rect(15, y - 4, pageWidth - 30, rowHeight, 'F');
@@ -138,13 +198,78 @@ function AuditDetail() {
                 y += rowHeight;
             });
 
-            // footer
+            // Sectiune task-uri manuale
+            const manualTasks = audit.manualTaskResults || [];
+            if (manualTasks.length > 0) {
+                // Verificare daca este necesara o pagina noua
+                if (y > 230) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                y += 10;
+                doc.setFontSize(12);
+                doc.setTextColor(55, 65, 81);
+                doc.text(`Task-uri Manuale (${manualTasks.length} total)`, 15, y);
+                y += 8;
+
+                // antet tabel manual
+                doc.setFillColor(243, 244, 246);
+                doc.rect(15, y, pageWidth - 30, 8, 'F');
+                doc.setFontSize(9);
+                doc.setTextColor(55, 65, 81);
+                doc.text('ID', 17, y + 5.5);
+                doc.text('Task', 40, y + 5.5);
+                doc.text('Status', 120, y + 5.5);
+                doc.text('Comentarii', 145, y + 5.5);
+                y += 10;
+
+                // randuri task-uri manuale
+                doc.setFontSize(8);
+                manualTasks.forEach((task, i) => {
+                    if (y > 270) {
+                        doc.addPage();
+                        y = 20;
+                    }
+
+                    const rowHeight = 7;
+
+                    if (i % 2 === 0) {
+                        doc.setFillColor(249, 250, 251);
+                        doc.rect(15, y - 4, pageWidth - 30, rowHeight, 'F');
+                    }
+
+                    doc.setTextColor(107, 114, 128);
+                    const checkId = task.manualCheck?.control?.controlId || task.manualCheck?.checkId || '-';
+                    doc.text(checkId.substring(0, 10), 17, y);
+
+                    doc.setTextColor(31, 41, 55);
+                    const title = task.manualCheck?.title || 'Task Manual';
+                    doc.text(title.substring(0, 40), 40, y);
+
+                    // status cu culoare
+                    const status = task.status === 'COMPLETED' ? 'PASSED' :
+                        task.status === 'REJECTED' ? 'FAILED' : task.status;
+                    if (task.status === 'COMPLETED') doc.setTextColor(16, 185, 129);
+                    else if (task.status === 'REJECTED') doc.setTextColor(239, 68, 68);
+                    else doc.setTextColor(245, 158, 11);
+                    doc.text(status, 120, y);
+
+                    doc.setTextColor(107, 114, 128);
+                    const notes = (task.reviewNotes || '-').substring(0, 30);
+                    doc.text(notes, 145, y);
+
+                    y += rowHeight;
+                });
+            }
+
+            // subsol
             y = doc.internal.pageSize.getHeight() - 15;
             doc.setFontSize(8);
             doc.setTextColor(156, 163, 175); // #9ca3af
             doc.text(`Generat de BitTrail - ${new Date().toLocaleString('ro-RO')}`, pageWidth / 2, y, { align: 'center' });
 
-            // download
+            // descarcare
             const fileName = `Audit_${audit.server?.hostname || 'report'}_${new Date().toISOString().split('T')[0]}.pdf`;
             doc.save(fileName);
         } catch (err) {
@@ -202,9 +327,18 @@ function AuditDetail() {
     const errorCount = audit.checkResults?.filter(r => r.status === 'ERROR').length || 0;
     const totalChecks = audit.checkResults?.length || 0;
 
+    // Contoare task-uri manuale
+    const manualTasks = audit.manualTaskResults || [];
+    const totalManual = manualTasks.length;
+    const completedManual = manualTasks.filter(t => t.status === 'COMPLETED' || t.status === 'REJECTED').length;
+    const pendingManual = totalManual - completedManual;
+    const allManualCompleted = totalManual > 0 && pendingManual === 0;
+    const manualPassCount = manualTasks.filter(t => t.status === 'COMPLETED').length;
+    const manualFailCount = manualTasks.filter(t => t.status === 'REJECTED').length;
+
     return (
         <div className="audit-detail-page" ref={reportRef}>
-            {/* Breadcrumbs */}
+            {/* Navigare */}
             <nav className="breadcrumbs">
                 <Link to="/">Dashboard</Link>
                 <span className="separator">/</span>
@@ -213,7 +347,7 @@ function AuditDetail() {
                 <span className="current">Audit #{id.slice(0, 8)}</span>
             </nav>
 
-            {/* Header */}
+            {/* Antet */}
             <div className="audit-header">
                 <div className="audit-header-info">
                     <h1>
@@ -230,8 +364,34 @@ function AuditDetail() {
                         <span><strong>Data:</strong> {formatDate(audit.createdAt)}</span>
                     </div>
                 </div>
-                <div className="audit-header-actions">
-                    <button className="btn btn-primary" onClick={handleExportPDF}>
+                <div className="audit-header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    {/* Indicator progres task-uri manuale */}
+                    {totalManual > 0 && !isRunning && (
+                        <div style={{
+                            padding: '0.5rem 1rem',
+                            background: allManualCompleted ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            borderRadius: '8px',
+                            fontSize: '0.8rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                        }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '16px', color: allManualCompleted ? 'var(--success)' : 'var(--warning)' }}>
+                                {allManualCompleted ? 'task_alt' : 'pending_actions'}
+                            </span>
+                            <span>
+                                Task-uri: <strong>{completedManual}/{totalManual}</strong>
+                                {allManualCompleted && <span style={{ color: 'var(--success)', marginLeft: '0.5rem' }}>✓ Complet</span>}
+                            </span>
+                        </div>
+                    )}
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleExportPDF}
+                        disabled={isRunning}
+                        title={isRunning ? "Finalizati auditul pentru a exporta" : "Exporta raport PDF"}
+                        style={isRunning ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                    >
                         <span className="material-symbols-outlined">picture_as_pdf</span>
                         Export PDF
                     </button>
@@ -249,7 +409,7 @@ function AuditDetail() {
                 </div>
             ) : (
                 <>
-                    {/* Score Cards */}
+                    {/* Carduri Scor */}
                     <div className="score-grid">
                         <div className="score-card">
                             <div className="score-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
@@ -300,7 +460,7 @@ function AuditDetail() {
                         </div>
                     </div>
 
-                    {/* Summary Banner */}
+                    {/* Banner Sumar */}
                     <div className={`summary-banner ${audit.automatedCompliancePercent >= 80 ? 'success' : audit.automatedCompliancePercent >= 50 ? 'warning' : 'danger'}`}>
                         <span className="material-symbols-outlined">
                             {audit.automatedCompliancePercent >= 80 ? 'shield_with_heart' : audit.automatedCompliancePercent >= 50 ? 'gpp_maybe' : 'gpp_bad'}
@@ -320,7 +480,7 @@ function AuditDetail() {
                         </div>
                     </div>
 
-                    {/* Tabs */}
+                    {/* Tab-uri */}
                     <div className="audit-tabs">
                         <button className={`tab ${activeTab === 'automated' ? 'active' : ''}`} onClick={() => setActiveTab('automated')}>
                             <span className="material-symbols-outlined">computer</span>
@@ -336,7 +496,7 @@ function AuditDetail() {
                         </button>
                     </div>
 
-                    {/* Results List */}
+                    {/* Lista Rezultate */}
                     <div className="results-container">
                         {activeTab === 'automated' && audit.checkResults?.map((result, idx) => (
                             <CheckResultCard key={result.id} result={result} expanded={expandedCheck === idx} onToggle={() => setExpandedCheck(expandedCheck === idx ? null : idx)} />
@@ -349,18 +509,12 @@ function AuditDetail() {
                         {activeTab === 'manual' && (
                             audit.manualTaskResults?.length > 0 ? (
                                 audit.manualTaskResults.map((task) => (
-                                    <div key={task.id} className="check-result-card">
-                                        <div className="check-result-header">
-                                            <div className="check-result-info">
-                                                <span className="check-id">{task.manualCheck?.control?.controlId || 'MANUAL'}</span>
-                                                <h4>{task.manualCheck?.title || 'Task Manual'}</h4>
-                                            </div>
-                                            <span className={`badge ${task.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>
-                                                {task.status}
-                                            </span>
-                                        </div>
-                                        {task.reviewNotes && <p className="check-notes">{task.reviewNotes}</p>}
-                                    </div>
+                                    <ManualTaskCard
+                                        key={task.id}
+                                        task={task}
+                                        auditRunId={audit.id}
+                                        onUpdate={loadAudit}
+                                    />
                                 ))
                             ) : (
                                 <div className="empty-state-small">
@@ -378,6 +532,193 @@ function AuditDetail() {
                         )}
                     </div>
                 </>
+            )}
+        </div>
+    );
+}
+
+function ManualTaskCard({ task, auditRunId, onUpdate }) {
+    const [expanded, setExpanded] = useState(false);
+    const [notes, setNotes] = useState(task.reviewNotes || '');
+    const [saving, setSaving] = useState(false);
+
+    const handleMark = async (approved) => {
+        setSaving(true);
+        try {
+            await auditApi.approveTask(auditRunId, task.id, approved, notes);
+            onUpdate(); // refresh audit data
+        } catch (err) {
+            console.error('Failed to update task:', err);
+            alert('Eroare la actualizarea task-ului');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleReset = async () => {
+        if (!confirm('Esti sigur ca vrei sa schimbi rezultatul? Statusul va fi resetat la PENDING.')) return;
+        setSaving(true);
+        try {
+            await auditApi.resetTask(auditRunId, task.id);
+            onUpdate();
+        } catch (err) {
+            console.error('Failed to reset task:', err);
+            alert('Eroare la resetarea task-ului');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const statusClass = task.status === 'COMPLETED' ? 'pass' :
+        task.status === 'REJECTED' ? 'fail' :
+            task.status === 'IN_PROGRESS' ? 'warn' : '';
+
+    const getStatusLabel = () => {
+        switch (task.status) {
+            case 'COMPLETED': return 'PASSED';
+            case 'REJECTED': return 'FAILED';
+            case 'IN_PROGRESS': return 'IN REVIEW';
+            case 'NOT_APPLICABLE': return 'N/A';
+            default: return 'PENDING';
+        }
+    };
+
+    return (
+        <div className={`check-result-card ${statusClass}`}>
+            <div className="check-result-header" onClick={() => setExpanded(!expanded)}>
+                <div className="check-result-info">
+                    <span className="check-id">{task.manualCheck?.control?.controlId || task.manualCheck?.checkId || 'MANUAL'}</span>
+                    <h4>{task.manualCheck?.title || 'Task Manual'}</h4>
+                    <span className="check-category">{task.manualCheck?.control?.category || ''}</span>
+                </div>
+                <div className="check-result-status">
+                    <span className={`badge badge-${statusClass || 'warning'}`}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                            {task.status === 'COMPLETED' ? 'check' : task.status === 'REJECTED' ? 'close' : 'pending'}
+                        </span>
+                        {getStatusLabel()}
+                    </span>
+                    <span className="expand-icon material-symbols-outlined">
+                        {expanded ? 'expand_less' : 'expand_more'}
+                    </span>
+                </div>
+            </div>
+
+            {expanded && (
+                <div className="check-result-details">
+                    {/* Instructiuni */}
+                    {task.manualCheck?.instructions && (
+                        <div className="detail-row">
+                            <span className="detail-label">Instructiuni:</span>
+                            <span className="detail-value">{task.manualCheck.instructions}</span>
+                        </div>
+                    )}
+
+                    {/* Specificatii Dovezi */}
+                    {task.manualCheck?.evidenceSpec && (
+                        <div className="detail-row">
+                            <span className="detail-label">Dovada acceptata:</span>
+                            <span className="detail-value" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {task.manualCheck.evidenceSpec.allowUpload && <span className="badge badge-neutral">Upload fisier</span>}
+                                {task.manualCheck.evidenceSpec.allowLink && <span className="badge badge-neutral">Link extern</span>}
+                                {task.manualCheck.evidenceSpec.allowAttestation && <span className="badge badge-neutral">Atestare</span>}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Dovezi Existente */}
+                    {task.evidence?.length > 0 && (
+                        <div className="detail-row">
+                            <span className="detail-label">Dovezi incarcate:</span>
+                            <span className="detail-value">{task.evidence.length} fisier(e)</span>
+                        </div>
+                    )}
+
+                    {/* Intrare Note */}
+                    <div className="detail-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                        <span className="detail-label" style={{ marginBottom: '0.5rem' }}>Comentarii auditor:</span>
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Adauga comentarii despre aceasta verificare..."
+                            disabled={task.status === 'COMPLETED' || task.status === 'REJECTED'}
+                            style={{
+                                width: '100%',
+                                minHeight: '80px',
+                                padding: '0.75rem',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border-color)',
+                                fontFamily: 'inherit',
+                                fontSize: '0.875rem',
+                                resize: 'vertical',
+                                background: task.status === 'COMPLETED' || task.status === 'REJECTED' ? 'var(--bg-secondary)' : 'var(--bg-primary)',
+                            }}
+                        />
+                    </div>
+
+                    {/* Butoane Actiune - afisare doar daca nu este deja marcat */}
+                    {task.status !== 'COMPLETED' && task.status !== 'REJECTED' && (
+                        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
+                            <button
+                                className="btn"
+                                onClick={(e) => { e.stopPropagation(); handleMark(false); }}
+                                disabled={saving}
+                                style={{
+                                    background: 'var(--danger)',
+                                    color: 'white',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                }}
+                            >
+                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>close</span>
+                                {saving ? 'Se salveaza...' : 'Marcheaza FAILED'}
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={(e) => { e.stopPropagation(); handleMark(true); }}
+                                disabled={saving}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                }}
+                            >
+                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>check</span>
+                                {saving ? 'Se salveaza...' : 'Marcheaza PASSED'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Afisare info revizuire si buton schimbare daca este deja marcat */}
+                    {(task.status === 'COMPLETED' || task.status === 'REJECTED') && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+                            {task.reviewedAt && (
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center' }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: '14px', marginRight: '0.25rem' }}>schedule</span>
+                                    Marcat la {new Date(task.reviewedAt).toLocaleString('ro-RO')}
+                                </div>
+                            )}
+                            <button
+                                className="btn"
+                                onClick={(e) => { e.stopPropagation(); handleReset(); }}
+                                disabled={saving}
+                                style={{
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border-color)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    fontSize: '0.8rem',
+                                    padding: '0.5rem 1rem',
+                                }}
+                            >
+                                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>refresh</span>
+                                Schimba rezultat
+                            </button>
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );
@@ -452,3 +793,4 @@ function CheckResultCard({ result, expanded, onToggle }) {
 }
 
 export default AuditDetail;
+

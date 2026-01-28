@@ -1,4 +1,4 @@
-// Middleware pentru error handling centralizat
+// Middleware pentru gestionare erori centralizata
 const errorHandler = (err, req, res, next) => {
     console.error('Error:', err);
 
@@ -26,7 +26,7 @@ const errorHandler = (err, req, res, next) => {
         });
     }
 
-    // Erori custom
+    // Erori personalizate
     if (err.statusCode) {
         return res.status(err.statusCode).json({
             error: err.name || 'Error',
@@ -41,7 +41,7 @@ const errorHandler = (err, req, res, next) => {
     });
 };
 
-// Clasa pentru erori custom
+// Clasa pentru erori personalizate
 class AppError extends Error {
     constructor(message, statusCode) {
         super(message);
@@ -85,7 +85,7 @@ class BadRequestError extends AppError {
     }
 }
 
-module.exports = {
+export {
     errorHandler,
     AppError,
     NotFoundError,

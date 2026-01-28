@@ -1,0 +1,569 @@
+{
+    "$schema": "bittrail-template@1.0",
+    "metadata": {
+        "name": "ISO 27002:2022 Technical Controls",
+        "description": "Template de audit bazat pe controalele tehnice din ISO/IEC 27002:2022. Aceasta include controalele din categoria 8 (Technological Controls) care pot fi automatizate pe servere Linux.",
+        "version": "1.0.0",
+        "type": "CUSTOM",
+        "author": "BitTrail Platform",
+        "source": "ISO/IEC 27002:2022 Annex A - Technological Controls (Category 8)",
+        "createdAt": "2024-01-01T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "A.8.1",
+            "title": "Dispozitive endpoint utilizator",
+            "category": "A.8 Technological Controls",
+            "severity": "HIGH",
+            "rationale": "Dispozitivele endpoint trebuie securizate si monitorizate.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.1.1",
+                    "title": "Screen lock timeout configurat",
+                    "command": "gsettings get org.gnome.desktop.session idle-delay 2>/dev/null | grep -oE '[0-9]+' || echo 'N/A'",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.1.M1",
+                    "title": "Politica dispozitive endpoint",
+                    "instructions": "Documentati politica pentru dispozitivele endpoint: cerinte de criptare, software obligatoriu (antivirus, EDR), reguli de folosire.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.2",
+            "title": "Drepturi de acces privilegiat",
+            "category": "A.8 Technological Controls",
+            "severity": "CRITICAL",
+            "rationale": "Accesul privilegiat trebuie restrictionat si monitorizat riguros.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.2.1",
+                    "title": "Utilizatori in grupul sudo",
+                    "command": "getent group sudo 2>/dev/null | cut -d: -f4",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "A.8.2.2",
+                    "title": "Conturi UID 0",
+                    "command": "awk -F: '$3==0 {print $1}' /etc/passwd | wc -l",
+                    "expectedResult": "1",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Exista mai multe conturi cu UID 0 (doar root ar trebui)"
+                },
+                {
+                    "checkId": "A.8.2.3",
+                    "title": "Reguli sudo NOPASSWD",
+                    "command": "grep -rE 'NOPASSWD' /etc/sudoers /etc/sudoers.d/ 2>/dev/null | grep -v '^#' | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Exista reguli sudo fara parola (risc de securitate)"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "A.8.3",
+            "title": "Restrictionare acces informatii",
+            "category": "A.8 Technological Controls",
+            "severity": "HIGH",
+            "rationale": "Accesul la informatii trebuie limitat conform clasificarii.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.3.1",
+                    "title": "Fisiere world-readable",
+                    "command": "find /home -type f -perm -0004 2>/dev/null | head -5 | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "Exista fisiere accesibile public in /home"
+                },
+                {
+                    "checkId": "A.8.3.2",
+                    "title": "Permisiuni /etc/shadow",
+                    "command": "stat -c '%a' /etc/shadow 2>/dev/null",
+                    "expectedResult": "640",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "/etc/shadow nu are permisiuni corecte"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "A.8.5",
+            "title": "Autentificare securizata",
+            "category": "A.8 Technological Controls",
+            "severity": "CRITICAL",
+            "rationale": "Mecanismele de autentificare trebuie sa fie robuste.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.5.1",
+                    "title": "SSH PermitRootLogin",
+                    "command": "sshd -T 2>/dev/null | grep -i '^permitrootlogin' | awk '{print $2}'",
+                    "expectedResult": "no",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH permite login root direct"
+                },
+                {
+                    "checkId": "A.8.5.2",
+                    "title": "SSH PermitEmptyPasswords",
+                    "command": "sshd -T 2>/dev/null | grep -i '^permitemptypasswords' | awk '{print $2}'",
+                    "expectedResult": "no",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH permite parole goale"
+                },
+                {
+                    "checkId": "A.8.5.3",
+                    "title": "SSH MaxAuthTries",
+                    "command": "sshd -T 2>/dev/null | grep -i '^maxauthtries' | awk '{print $2}'",
+                    "expectedResult": "6",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "SSH MaxAuthTries prea mare"
+                },
+                {
+                    "checkId": "A.8.5.4",
+                    "title": "PAM pam_faillock configurat",
+                    "command": "grep -r 'pam_faillock' /etc/pam.d/ 2>/dev/null | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_THAN",
+                    "onFailMessage": "pam_faillock nu este configurat pentru lockout"
+                },
+                {
+                    "checkId": "A.8.5.5",
+                    "title": "Lungime minima parola",
+                    "command": "grep -E '^minlen' /etc/security/pwquality.conf 2>/dev/null | awk -F= '{print $2}' | tr -d ' ' || echo '8'",
+                    "expectedResult": "8",
+                    "comparison": "GREATER_THAN_OR_EQUAL",
+                    "onFailMessage": "Lungimea minima a parolei este prea mica"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.5.M1",
+                    "title": "Politica MFA",
+                    "instructions": "Documentati folosirea MFA (Multi-Factor Authentication) pentru accesul administrativ. Ce metode MFA sunt suportate?",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.6",
+            "title": "Management capacitate",
+            "category": "A.8 Technological Controls",
+            "severity": "MEDIUM",
+            "rationale": "Resursele trebuie monitorizate pentru a preveni epuizarea.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.6.1",
+                    "title": "Spatiu disk disponibil (%)",
+                    "command": "df / 2>/dev/null | tail -1 | awk '{print 100-$5}' | tr -d '%'",
+                    "expectedResult": "10",
+                    "comparison": "GREATER_THAN_OR_EQUAL",
+                    "onFailMessage": "Spatiu disk disponibil sub 10%"
+                },
+                {
+                    "checkId": "A.8.6.2",
+                    "title": "Memorie disponibila (MB)",
+                    "command": "free -m 2>/dev/null | grep Mem | awk '{print $7}'",
+                    "expectedResult": "256",
+                    "comparison": "GREATER_THAN_OR_EQUAL",
+                    "onFailMessage": "Memorie disponibila sub 256MB"
+                },
+                {
+                    "checkId": "A.8.6.3",
+                    "title": "Load average (1 min)",
+                    "command": "cat /proc/loadavg 2>/dev/null | awk '{print int($1)}'",
+                    "expectedResult": "10",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "Load average prea mare"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "A.8.7",
+            "title": "Protectie malware",
+            "category": "A.8 Technological Controls",
+            "severity": "HIGH",
+            "rationale": "Sistemele trebuie protejate impotriva malware.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.7.1",
+                    "title": "ClamAV instalat",
+                    "command": "which clamscan > /dev/null 2>&1 && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "A.8.7.2",
+                    "title": "rkhunter instalat",
+                    "command": "which rkhunter > /dev/null 2>&1 && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "A.8.7.3",
+                    "title": "chkrootkit instalat",
+                    "command": "which chkrootkit > /dev/null 2>&1 && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.7.M1",
+                    "title": "Solutie antimalware",
+                    "instructions": "Documentati solutia antimalware folosita si frecventa actualizarii semnaturilor.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.8",
+            "title": "Management vulnerabilitati tehnice",
+            "category": "A.8 Technological Controls",
+            "severity": "CRITICAL",
+            "rationale": "Vulnerabilitatile trebuie identificate si remediate prompt.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.8.1",
+                    "title": "Update-uri disponibile",
+                    "command": "apt list --upgradable 2>/dev/null | tail -n +2 | wc -l",
+                    "expectedResult": "20",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "Multe update-uri disponibile - aplicati patch-urile"
+                },
+                {
+                    "checkId": "A.8.8.2",
+                    "title": "Update-uri securitate",
+                    "command": "apt list --upgradable 2>/dev/null | grep -i security | wc -l",
+                    "expectedResult": "5",
+                    "comparison": "LESS_THAN_OR_EQUAL",
+                    "onFailMessage": "Update-uri de securitate neaplicate"
+                },
+                {
+                    "checkId": "A.8.8.3",
+                    "title": "unattended-upgrades instalat",
+                    "command": "dpkg-query -W -f='${Status}' unattended-upgrades 2>/dev/null | grep -q 'installed' && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "expectedResult": "INSTALLED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "unattended-upgrades nu este instalat"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "A.8.9",
+            "title": "Management configuratii",
+            "category": "A.8 Technological Controls",
+            "severity": "HIGH",
+            "rationale": "Configuratiile trebuie gestionate si versionate.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.9.1",
+                    "title": "Git instalat",
+                    "command": "which git > /dev/null 2>&1 && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "A.8.9.2",
+                    "title": "etckeeper instalat",
+                    "command": "dpkg-query -W etckeeper 2>/dev/null && echo 'INSTALLED' || echo 'NOT_INSTALLED'",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.9.M1",
+                    "title": "Politica configuration management",
+                    "instructions": "Documentati cum sunt gestionate configuratiile: sunt versionate? exista backup? cine poate modifica?",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.13",
+            "title": "Backup informatii",
+            "category": "A.8 Technological Controls",
+            "severity": "CRITICAL",
+            "rationale": "Backup-urile sunt esentiale pentru continuitatea afacerii.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.13.1",
+                    "title": "Script backup exista",
+                    "command": "ls /etc/cron.daily/*backup* /etc/cron.weekly/*backup* 2>/dev/null | wc -l",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.13.M1",
+                    "title": "Strategie backup",
+                    "instructions": "Documentati strategia de backup: frecventa (RPO), timp restaurare (RTO), locatie stocare, retentie, criptare.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": false,
+                        "requiresApproval": true
+                    }
+                },
+                {
+                    "checkId": "A.8.13.M2",
+                    "title": "Test restore",
+                    "instructions": "Incarcati dovada ultimului test de restaurare efectuat cu succes.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.15",
+            "title": "Logging",
+            "category": "A.8 Technological Controls",
+            "severity": "HIGH",
+            "rationale": "Log-urile sunt esentiale pentru detectia si investigarea incidentelor.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.15.1",
+                    "title": "rsyslog activ",
+                    "command": "systemctl is-active rsyslog 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "rsyslog nu ruleaza"
+                },
+                {
+                    "checkId": "A.8.15.2",
+                    "title": "auditd activ",
+                    "command": "systemctl is-active auditd 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "auditd nu ruleaza"
+                },
+                {
+                    "checkId": "A.8.15.3",
+                    "title": "journald activ",
+                    "command": "systemctl is-active systemd-journald 2>/dev/null",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "journald nu ruleaza"
+                },
+                {
+                    "checkId": "A.8.15.4",
+                    "title": "Spatiu /var/log",
+                    "command": "df /var/log 2>/dev/null | tail -1 | awk '{print 100-$5}' | tr -d '%'",
+                    "expectedResult": "20",
+                    "comparison": "GREATER_THAN_OR_EQUAL",
+                    "onFailMessage": "Spatiu insuficient pentru log-uri"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "A.8.16",
+            "title": "Monitorizare activitati",
+            "category": "A.8 Technological Controls",
+            "severity": "HIGH",
+            "rationale": "Activitatile trebuie monitorizate pentru detectia anomaliilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.16.1",
+                    "title": "fail2ban activ",
+                    "command": "systemctl is-active fail2ban 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "fail2ban nu ruleaza"
+                },
+                {
+                    "checkId": "A.8.16.2",
+                    "title": "Loguri auth recente",
+                    "command": "find /var/log -name 'auth.log*' -mtime -1 2>/dev/null | wc -l",
+                    "expectedResult": "0",
+                    "comparison": "GREATER_THAN",
+                    "onFailMessage": "Nu exista log-uri de autentificare recente"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.16.M1",
+                    "title": "Sistem SIEM",
+                    "instructions": "Documentati sistemul de monitorizare/SIEM folosit si alertele configurate.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.17",
+            "title": "Sincronizare ceas",
+            "category": "A.8 Technological Controls",
+            "severity": "MEDIUM",
+            "rationale": "Sincronizarea timpului este necesara pentru corelarea log-urilor.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.17.1",
+                    "title": "NTP/chrony/timesyncd activ",
+                    "command": "systemctl is-active chronyd 2>/dev/null || systemctl is-active systemd-timesyncd 2>/dev/null || systemctl is-active ntp 2>/dev/null || echo 'inactive'",
+                    "expectedResult": "active",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Niciun serviciu de sincronizare timp nu este activ"
+                },
+                {
+                    "checkId": "A.8.17.2",
+                    "title": "Timp sincronizat",
+                    "command": "timedatectl show 2>/dev/null | grep -q 'NTPSynchronized=yes' && echo 'SYNCED' || echo 'NOT_SYNCED'",
+                    "expectedResult": "SYNCED",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Ceasul nu este sincronizat cu NTP"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "A.8.20",
+            "title": "Securitate retele",
+            "category": "A.8 Technological Controls",
+            "severity": "CRITICAL",
+            "rationale": "Retelele trebuie securizate pentru a preveni accesul neautorizat.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.20.1",
+                    "title": "Firewall activ",
+                    "command": "ufw status 2>/dev/null | head -1 | grep -q 'active' && echo 'ACTIVE' || echo 'INACTIVE'",
+                    "expectedResult": "ACTIVE",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Firewall-ul nu este activ"
+                },
+                {
+                    "checkId": "A.8.20.2",
+                    "title": "Default deny incoming",
+                    "command": "ufw status verbose 2>/dev/null | grep -q 'Default: deny (incoming)' && echo 'DENY' || echo 'NOT_DENY'",
+                    "expectedResult": "DENY",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "Firewall nu are politica default deny incoming"
+                },
+                {
+                    "checkId": "A.8.20.3",
+                    "title": "IP forwarding dezactivat",
+                    "command": "sysctl -n net.ipv4.ip_forward 2>/dev/null",
+                    "expectedResult": "0",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "IP forwarding este activat"
+                },
+                {
+                    "checkId": "A.8.20.4",
+                    "title": "SYN cookies",
+                    "command": "sysctl -n net.ipv4.tcp_syncookies 2>/dev/null",
+                    "expectedResult": "1",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SYN cookies nu sunt activate"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "A.8.24",
+            "title": "Utilizare criptografie",
+            "category": "A.8 Technological Controls",
+            "severity": "HIGH",
+            "rationale": "Criptografia protejeaza datele in tranzit si la repaus.",
+            "automatedChecks": [
+                {
+                    "checkId": "A.8.24.1",
+                    "title": "OpenSSL instalat",
+                    "command": "openssl version 2>/dev/null | head -1 || echo 'NOT_INSTALLED'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "A.8.24.2",
+                    "title": "SSH ciphers puternice",
+                    "command": "sshd -T 2>/dev/null | grep -i '^ciphers' | grep -qE '(aes256|chacha20)' && echo 'STRONG' || echo 'WEAK'",
+                    "expectedResult": "STRONG",
+                    "comparison": "EQUALS",
+                    "onFailMessage": "SSH nu foloseste cipher-uri puternice"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.24.M1",
+                    "title": "Politica criptografie",
+                    "instructions": "Documentati standardele de criptografie folosite: algoritmi, lungimi chei, gestiune certificate.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.25",
+            "title": "Ciclu de viata dezvoltare securizat",
+            "category": "A.8 Technological Controls",
+            "severity": "MEDIUM",
+            "rationale": "Securitatea trebuie integrata in dezvoltare.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.25.M1",
+                    "title": "Politica SDLC securizat",
+                    "instructions": "Documentati cum este integrata securitatea in procesul de dezvoltare: code review, security testing, dependency scanning.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "A.8.26",
+            "title": "Cerinte securitate aplicatii",
+            "category": "A.8 Technological Controls",
+            "severity": "MEDIUM",
+            "rationale": "Aplicatiile trebuie sa respecte cerinte de securitate.",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "A.8.26.M1",
+                    "title": "Cerinte securitate",
+                    "instructions": "Documentati cerintele de securitate pentru aplicatiile rulate pe acest server: input validation, session management, error handling.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        }
+    ]
+}

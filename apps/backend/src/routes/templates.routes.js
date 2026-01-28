@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import * as templatesService from '../services/templates.service.js';
+import { authenticate, authorize } from '../middleware/auth.middleware.js';
+import { auditLog } from '../middleware/audit.middleware.js';
+
 const router = express.Router();
-const templatesService = require('../services/templates.service');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
-const { auditLog } = require('../middleware/audit.middleware');
 
 /**
  * @swagger
@@ -29,7 +30,7 @@ router.get('/',
  * /templates/predefined:
  *   get:
  *     tags: [Templates]
- *     summary: Lista template-uri predefinite din codebase
+ *     summary: Lista template-uri predefinite din cod
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/predefined',
@@ -49,7 +50,7 @@ router.get('/predefined',
  * /templates/predefined/{filename}:
  *   get:
  *     tags: [Templates]
- *     summary: Obtine continutul unui template predefinit
+ *     summary: Obtinere continut template predefinit
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/predefined/:filename',
@@ -69,7 +70,7 @@ router.get('/predefined/:filename',
  * /templates/{id}:
  *   get:
  *     tags: [Templates]
- *     summary: Detalii template cu controls
+ *     summary: Detalii template cu controale
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id',
@@ -89,7 +90,7 @@ router.get('/:id',
  * /templates:
  *   post:
  *     tags: [Templates]
- *     summary: Creeaza template nou (gol)
+ *     summary: Creare template nou (gol)
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/',
@@ -114,7 +115,7 @@ router.post('/',
  * /templates/importJson:
  *   post:
  *     tags: [Templates]
- *     summary: Importa template din JSON
+ *     summary: Importare template din JSON
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/importJson',
@@ -136,7 +137,7 @@ router.post('/importJson',
  * /templates/validateJson:
  *   post:
  *     tags: [Templates]
- *     summary: Valideaza template JSON fara import
+ *     summary: Validare template JSON fara import
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/validateJson',
@@ -156,7 +157,7 @@ router.post('/validateJson',
  * /templates/{id}/exportJson:
  *   get:
  *     tags: [Templates]
- *     summary: Exporta template ca JSON
+ *     summary: Exportare template ca JSON
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id/exportJson',
@@ -176,7 +177,7 @@ router.get('/:id/exportJson',
  * /templates/{id}/activeVersion:
  *   get:
  *     tags: [Templates]
- *     summary: Obtine versiunea activa a template-ului
+ *     summary: Obtinere versiune activa a template-ului
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id/activeVersion',
@@ -196,7 +197,7 @@ router.get('/:id/activeVersion',
  * /templates/{id}/publish:
  *   put:
  *     tags: [Templates]
- *     summary: Publica template (activeaza versiunea)
+ *     summary: Publicare template (activare versiune)
  *     security: [{ bearerAuth: [] }]
  */
 router.put('/:id/publish',
@@ -218,7 +219,7 @@ router.put('/:id/publish',
  * /templates/{id}/controls:
  *   put:
  *     tags: [Templates]
- *     summary: Actualizeaza controalele template-ului (creeza versiune noua)
+ *     summary: Actualizare controale template (creare versiune noua)
  *     security: [{ bearerAuth: [] }]
  */
 router.put('/:id/controls',
@@ -241,7 +242,7 @@ router.put('/:id/controls',
  * /templates/{id}:
  *   delete:
  *     tags: [Templates]
- *     summary: Sterge template
+ *     summary: Stergere template
  *     security: [{ bearerAuth: [] }]
  */
 router.delete('/:id',
@@ -258,4 +259,4 @@ router.delete('/:id',
     }
 );
 
-module.exports = router;
+export default router;

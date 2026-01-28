@@ -1,16 +1,17 @@
-const express = require('express');
+import express from 'express';
+import * as authService from '../services/auth.service.js';
+import { authLimiter } from '../middleware/rate-limit.middleware.js';
+import { authenticate } from '../middleware/auth.middleware.js';
+import { body, validationResult } from 'express-validator';
+
 const router = express.Router();
-const authService = require('../services/auth.service');
-const { authLimiter } = require('../middleware/rate-limit.middleware');
-const { authenticate } = require('../middleware/auth.middleware');
-const { body, validationResult } = require('express-validator');
 
 /**
  * @swagger
  * /auth/register:
  *   post:
  *     tags: [Auth]
- *     summary: Inregistrare user nou
+ *     summary: Inregistrare utilizator nou
  *     requestBody:
  *       required: true
  *       content:
@@ -52,7 +53,7 @@ router.post('/register',
  * /auth/login:
  *   post:
  *     tags: [Auth]
- *     summary: Login user
+ *     summary: Autentificare utilizator
  *     requestBody:
  *       required: true
  *       content:
@@ -90,12 +91,12 @@ router.post('/login',
  * /auth/refresh:
  *   post:
  *     tags: [Auth]
- *     summary: Refresh access token
+ *     summary: Reimprospatare token acces
  */
 router.post('/refresh',
     authLimiter,
     [
-        body('refreshToken').notEmpty().withMessage('Refresh token obligatoriu'),
+        body('refreshToken').notEmpty().withMessage('Token reimprospatare obligatoriu'),
     ],
     async (req, res, next) => {
         try {
@@ -117,7 +118,7 @@ router.post('/refresh',
  * /auth/logout:
  *   post:
  *     tags: [Auth]
- *     summary: Logout user
+ *     summary: Deconectare utilizator
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/logout',
@@ -132,4 +133,4 @@ router.post('/logout',
     }
 );
 
-module.exports = router;
+export default router;

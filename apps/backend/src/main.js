@@ -1,34 +1,39 @@
-require('dotenv').config({ path: ['.env', '../../.env'] });
+import 'dotenv/config';
 
-
-// fix serializare BigInt pt JSON
+// Fix serializare BigInt pentru JSON
 BigInt.prototype.toJSON = function () {
     return Number(this);
 };
 
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const http = require('http');
-const { Server } = require('socket.io');
-const swaggerUi = require('swagger-ui-express');
-const swaggerJsdoc = require('swagger-jsdoc');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import http from 'http';
+import { Server } from 'socket.io';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const authRoutes = require('./routes/auth.routes');
-const usersRoutes = require('./routes/users.routes');
-const serversRoutes = require('./routes/servers.routes');
-const agentRoutes = require('./routes/agent.routes');
-const templatesRoutes = require('./routes/templates.routes');
-const auditRoutes = require('./routes/audit.routes');
-const { setupWebSocket } = require('./websocket');
-const { errorHandler } = require('./middleware/error.middleware');
-const { prisma } = require('./lib/prisma');
-const { log, requestLogger } = require('./lib/logger');
+import authRoutes from './routes/auth.routes.js';
+import usersRoutes from './routes/users.routes.js';
+import serversRoutes from './routes/servers.routes.js';
+import agentRoutes from './routes/agent.routes.js';
+import templatesRoutes from './routes/templates.routes.js';
+import auditRoutes from './routes/audit.routes.js';
+import { setupWebSocket, io as wsIO } from './websocket.js';
+import { errorHandler } from './middleware/error.middleware.js';
+import { prisma } from './lib/prisma.js';
+import { log, requestLogger } from './lib/logger.js';
+
+// Echivalent __dirname pentru ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
 
-// config WebSocket
+// Configurare WebSocket
 const io = new Server(server, {
     cors: {
         origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
@@ -36,7 +41,7 @@ const io = new Server(server, {
     },
 });
 
-// middleware securitate
+// Middleware securitate
 app.use(helmet());
 app.use(cors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
@@ -44,14 +49,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// fisiere statice pt agent
-const path = require('path');
+// Fisiere statice pentru agent
 app.use('/downloads', express.static(path.join(__dirname, '../public')));
 
-// logger requesturi
+// Logger cereri
 app.use(requestLogger);
 
-// config swagger
+// Configurare Swagger
 const swaggerOptions = {
     definition: {
         openapi: '3.0.0',
@@ -90,32 +94,29 @@ app.use('/api/agent', agentRoutes);
 app.use('/api/templates', templatesRoutes);
 app.use('/api/audit', auditRoutes);
 
-// handler erori
+// Manipulare erori
 app.use(errorHandler);
 
-// init websocket
+// Initializare WebSocket
 setupWebSocket(io);
 
-// export pt alte module
-module.exports = { io };
+// Exportare pentru alte module
+export { io };
 
-// pornire server
+// Pornire server
 const PORT = process.env.BACKEND_PORT || 3000;
 
 server.listen(PORT, async () => {
-    console.log('');
-    console.log('╔════════════════════════════════════════════╗');
-    console.log('║           BitTrail API Server              ║');
-    console.log('╚════════════════════════════════════════════╝');
+    console.log('Se ruleaza sarcina cleanup audit...'); log('=== BitTrail API Server ===');
     console.log('');
 
-    // check conexiune db
+    // Verificare conexiune baza de date
     try {
         await prisma.$connect();
         log.success('Database conectata');
 
-        // seed templateuri
-        const seederService = require('./services/seeder.service');
+        // Initializare sabloane
+        const seederService = await import('./services/seeder.service.js');
         await seederService.seedTemplates();
 
     } catch (error) {
@@ -126,20 +127,58 @@ server.listen(PORT, async () => {
     log.info(`Swagger: http://localhost:${PORT}/api/docs`);
     log.info(`WebSocket: ws://localhost:${PORT}`);
     console.log('');
+
+    // Pornire job curatare (fiecare 5 minute)
+    const auditService = await import('./services/audit.service.js');
+    const serversService = await import('./services/servers.service.js');
+
+    // Curatare audituri expirate (fiecare 5 minute)
+    setInterval(async () => {
+        try {
+            const count = await auditService.cleanupStaleAudits();
+            if (count > 0) {
+                log.info(`[CURATARE] Stergere ${count} audituri vechi`);
+            }
+        } catch (err) {
+            log.error('Eroare job curatare:', err.message);
+        }
+    }, 5 * 60 * 1000);
+
+    // Verificare servere offline (fiecare 60 secunde)
+    // Rulare imediata la pornire pentru curatare statusuri vechi
+    try {
+        const count = await serversService.checkOfflineServers();
+        if (count > 0) {
+            log.info(`[STARTUP] Marcare ${count} servere ca OFFLINE`);
+        }
+    } catch (err) {
+        log.error('Eroare verificare startup offline:', err.message);
+    }
+
+    setInterval(async () => {
+        try {
+            const count = await serversService.checkOfflineServers();
+            if (count > 0) {
+                log.info(`[CURATARE] Marcare ${count} servere ca OFFLINE`);
+            }
+        } catch (err) {
+            log.error('Eroare job verificare offline:', err.message);
+        }
+    }, 60 * 1000);
 });
 
-// oprire gratiosa
+// Oprire gratiosa
 process.on('SIGTERM', async () => {
-    log.warn('SIGTERM received, closing...');
+    log.warn('SIGTERM primit, oprire...');
     await prisma.$disconnect();
     server.close(() => {
-        log.info('Server closed');
+        log.info('Server oprit');
         process.exit(0);
     });
 });
 
 process.on('SIGINT', async () => {
-    log.warn('SIGINT received, closing...');
+    log.warn('SIGINT primit, oprire...');
     await prisma.$disconnect();
     server.close(() => {
         log.info('Server closed');

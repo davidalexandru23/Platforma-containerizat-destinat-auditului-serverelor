@@ -1,0 +1,676 @@
+{
+    "$schema": "bittrail-template@1.0",
+    "metadata": {
+        "name": "NIS2 Baseline - Linux Server Automated Audit Pack",
+        "description": "Template de audit inspirat de cerintele NIS2 (masuri de management al riscurilor si securitate), adaptat pentru servere Linux. Include controale tehnice si operationale, cu verificari automate prin agent acolo unde este posibil.",
+        "version": "1.0.0",
+        "type": "CUSTOM",
+        "author": "BitTrail Platform",
+        "createdAt": "2026-01-27T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "NIS2-1.1",
+            "title": "Inventar software si pachete instalate",
+            "category": "Asset Management",
+            "rationale": "Exista un inventar al software-ului instalat, util pentru evaluarea expunerii si a patching-ului.",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-1.1.a",
+                    "title": "Listare pachete (dpkg/rpm)",
+                    "command": "if command -v dpkg >/dev/null 2>&1; then dpkg -l; elif command -v rpm >/dev/null 2>&1; then rpm -qa; else echo \"NO_PKG_MGR\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-1.1.M1",
+                    "title": "Verificare inventar pachete",
+                    "instructions": "Verificati lista pachetelor exportata si stocata la fiecare audit si istoricul comparativ intre rulari.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-1.2",
+            "title": "Inventar servicii active si expunere porturi",
+            "category": "Asset Management",
+            "rationale": "Serviciile care ruleaza si porturile ascultate sunt cunoscute si revizuite periodic.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-1.2.a",
+                    "title": "Systemd services running",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-units --type=service --state=running; else service --status-all 2>/dev/null || true; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-1.2.b",
+                    "title": "Listening ports",
+                    "command": "ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-2.1",
+            "title": "Patching si actualizari de securitate aplicate la timp",
+            "category": "Vulnerability & Patch Management",
+            "rationale": "Sistemul este la zi cu update-uri de securitate, iar restantele sunt tratate printr-un proces clar.",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-2.1.a",
+                    "title": "Check pending updates (APT)",
+                    "command": "if command -v apt >/dev/null 2>&1; then apt-get -s upgrade 2>/dev/null | sed -n '1,200p'; else echo \"SKIP_APT\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-2.1.b",
+                    "title": "Check pending updates (RPM)",
+                    "command": "if command -v dnf >/dev/null 2>&1; then dnf -q check-update || true; elif command -v yum >/dev/null 2>&1; then yum -q check-update || true; else echo \"SKIP_YUM_DNF\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-2.1.c",
+                    "title": "Last update history",
+                    "command": "if command -v journalctl >/dev/null 2>&1; then journalctl -u apt-daily.service -u apt-daily-upgrade.service --no-pager -n 200 2>/dev/null || true; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-2.2",
+            "title": "Vulnerability scanning de baza pe pachete si CVE-uri",
+            "category": "Vulnerability & Patch Management",
+            "rationale": "Exista o metoda de a corela pachetele instalate cu vulnerabilitati cunoscute (ex: scanner extern sau feed intern).",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-2.2.a",
+                    "title": "Get OS release",
+                    "command": "cat /etc/os-release 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-2.2.b",
+                    "title": "Get Kernel version",
+                    "command": "uname -a",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-3.1",
+            "title": "Firewall activ si reguli minime pentru expunere",
+            "category": "Network Security",
+            "rationale": "Exista filtrare la nivel host, cu reguli care permit doar ce este necesar.",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-3.1.a",
+                    "title": "UFW Status",
+                    "command": "if command -v ufw >/dev/null 2>&1; then ufw status verbose; else echo \"SKIP_UFW\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-3.1.b",
+                    "title": "NFT ruleset",
+                    "command": "if command -v nft >/dev/null 2>&1; then nft list ruleset; else echo \"SKIP_NFT\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-3.1.c",
+                    "title": "Iptables rules",
+                    "command": "if command -v iptables >/dev/null 2>&1; then iptables -S; iptables -L -n -v; else echo \"SKIP_IPTABLES\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-3.2",
+            "title": "SSH hardening, fara root login, fara parole unde e posibil",
+            "category": "Access Control",
+            "rationale": "Accesul remote este configurat sigur (PermitRootLogin no, PasswordAuthentication off unde este fezabil, ciphers modern).",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-3.2.a",
+                    "title": "SSHD Config Effective",
+                    "command": "sshd -T 2>/dev/null | sed -n '1,200p' || (cat /etc/ssh/sshd_config 2>/dev/null || true)",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-3.2.b",
+                    "title": "SSH Listen Ports",
+                    "command": "ss -lntp 2>/dev/null | grep -E ':(22|2222)\\b' || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-3.3",
+            "title": "Politica parole si blocare cont la brute force",
+            "category": "Access Control",
+            "rationale": "Sunt configurate politici de parola si protectii la incercari repetate (pam_faillock / faillock / fail2ban).",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-3.3.a",
+                    "title": "PAM Password Policy",
+                    "command": "grep -R \"pam_pwquality\\|pam_cracklib\" -n /etc/pam.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-3.3.b",
+                    "title": "Check faillock.conf",
+                    "command": "ls -la /etc/security/faillock.conf 2>/dev/null; cat /etc/security/faillock.conf 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-3.3.c",
+                    "title": "Fail2Ban status",
+                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status; fail2ban-client status sshd 2>/dev/null || true; else echo \"SKIP_FAIL2BAN\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-4.1",
+            "title": "Principiul least privilege pentru sudo si conturi admin",
+            "category": "Access Control",
+            "rationale": "Doar conturile necesare au sudo, iar configurarile sunt auditate.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-4.1.a",
+                    "title": "Sudoers dump",
+                    "command": "sudo -n true 2>/dev/null && (sudo cat /etc/sudoers 2>/dev/null; sudo ls -la /etc/sudoers.d 2>/dev/null; sudo sh -c 'for f in /etc/sudoers.d/*; do echo \"--- $f\"; cat \"$f\" 2>/dev/null; done' 2>/dev/null) || (cat /etc/sudoers 2>/dev/null; ls -la /etc/sudoers.d 2>/dev/null || true)",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-4.1.b",
+                    "title": "Admin groups members",
+                    "command": "getent group sudo 2>/dev/null || true; getent group wheel 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-4.2",
+            "title": "Conturi fara utilizare, conturi vechi, si acces chei SSH",
+            "category": "Identity Lifecycle",
+            "rationale": "Conturile inactive sunt revizuite, iar cheile SSH sunt gestionate (authorized_keys).",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-4.2.a",
+                    "title": "List local users",
+                    "command": "cut -d: -f1,3,6,7 /etc/passwd | sed -n '1,200p'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-4.2.b",
+                    "title": "Shadow last change info",
+                    "command": "if command -v chage >/dev/null 2>&1; then for u in $(cut -d: -f1 /etc/passwd | head -n 50); do chage -l \"$u\" 2>/dev/null | sed -n '1,6p' | sed \"s/^/[$u] /\"; done; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-4.2.c",
+                    "title": "SSH Keys Inventory",
+                    "command": "for d in /home/* /root; do [ -d \"$d/.ssh\" ] && { echo \"== $d ==\"; ls -la \"$d/.ssh\"; for f in \"$d/.ssh/authorized_keys\" \"$d/.ssh/authorized_keys2\"; do [ -f \"$f\" ] && { echo \"--- $f\"; sed -n '1,200p' \"$f\"; }; done; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-5.1",
+            "title": "Logging centralizat sau minim local, cu retentie definita",
+            "category": "Logging & Monitoring",
+            "rationale": "Logurile sunt colectate, protejate si pastrate conform politicii (minim local cu journald/rsyslog).",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-5.1.a",
+                    "title": "Journald config",
+                    "command": "cat /etc/systemd/journald.conf 2>/dev/null || true; journalctl --disk-usage 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-5.1.b",
+                    "title": "Rsyslog status",
+                    "command": "systemctl status rsyslog --no-pager 2>/dev/null || true; ls -la /etc/rsyslog.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-5.1.c",
+                    "title": "Logrotate config",
+                    "command": "cat /etc/logrotate.conf 2>/dev/null || true; ls -la /etc/logrotate.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-5.2",
+            "title": "Auditd activ pentru evenimente sensibile",
+            "category": "Logging & Monitoring",
+            "rationale": "Audit framework este activ (auditd) sau exista o alternativa echivalenta, pentru trasabilitate.",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-5.2.a",
+                    "title": "Auditd Status",
+                    "command": "systemctl status auditd --no-pager 2>/dev/null || true; auditctl -s 2>/dev/null || true; (ls -la /etc/audit /etc/audit/rules.d 2>/dev/null || true)",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-6.1",
+            "title": "Backup periodic, verificat, si protejat",
+            "category": "Backup & Recovery",
+            "rationale": "Exista backup-uri regulate, cu test de restore, si separare fata de sistemul auditat.",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-6.1.a",
+                    "title": "Backup jobs (cron)",
+                    "command": "ls -la /etc/cron.* 2>/dev/null || true; crontab -l 2>/dev/null || true; for u in $(cut -d: -f1 /etc/passwd | head -n 50); do crontab -u \"$u\" -l 2>/dev/null | sed \"s/^/[crontab:$u] /\"; done",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-6.1.b",
+                    "title": "Backup tools presence",
+                    "command": "command -v restic 2>/dev/null && restic version || true; command -v borg 2>/dev/null && borg --version || true; command -v rclone 2>/dev/null && rclone version | head -n 5 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-6.1.M1",
+                    "title": "Verificare politica si teste backup",
+                    "instructions": "Incarcati dovada ultimului test de restore si link catre politica de backup.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-6.2",
+            "title": "Protectie ransomware de baza la nivel host",
+            "category": "Resilience",
+            "rationale": "Exista masuri minime: permisiuni corecte, backup offline, restrictii executie unde e relevant, monitorizare modificari.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-6.2.a",
+                    "title": "Mount options",
+                    "command": "findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS | sed -n '1,200p'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-6.2.b",
+                    "title": "World writable dirs",
+                    "command": "find / -xdev -type d -perm -0002 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-7.1",
+            "title": "Configurare NTP si timp corect",
+            "category": "Operations",
+            "rationale": "Timpul este sincronizat (chrony/systemd-timesyncd) pentru investigatii si audit.",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-7.1.a",
+                    "title": "Time synchronization status",
+                    "command": "timedatectl status 2>/dev/null || date; (systemctl status chronyd --no-pager 2>/dev/null || true); (systemctl status systemd-timesyncd --no-pager 2>/dev/null || true)",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-7.2",
+            "title": "Criptare in tranzit, configuratii TLS sanatoase",
+            "category": "Cryptography",
+            "rationale": "Serviciile expuse folosesc TLS modern, fara suite vechi, iar certificatele sunt gestionate.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-7.2.a",
+                    "title": "Cert files inventory",
+                    "command": "ls -la /etc/ssl 2>/dev/null || true; ls -la /etc/letsencrypt 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-7.2.b",
+                    "title": "Nginx TLS snippets",
+                    "command": "if command -v nginx >/dev/null 2>&1; then nginx -T 2>/dev/null | sed -n '1,200p'; else echo \"SKIP_NGINX\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-7.2.c",
+                    "title": "Apache TLS config",
+                    "command": "if command -v apache2ctl >/dev/null 2>&1; then apache2ctl -S 2>/dev/null || true; apache2ctl -M 2>/dev/null || true; else echo \"SKIP_APACHE\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-7.2.M1",
+                    "title": "Validare configuratie TLS",
+                    "instructions": "Incarcati rezultatul scanarii cu un tool extern (ex: SSL Labs) sau echivalent intern.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-8.1",
+            "title": "Protectie la malware, EDR sau alternative",
+            "category": "Threat Management",
+            "rationale": "Exista o solutie de detectie sau un set minim de masuri (ex: ClamAV, auditd, sysmon for linux, agent EDR).",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-8.1.a",
+                    "title": "ClamAV Status",
+                    "command": "systemctl status clamav-freshclam --no-pager 2>/dev/null || true; clamscan --version 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-8.2",
+            "title": "Integritate fisiere si configuratii critice",
+            "category": "Threat Management",
+            "rationale": "Se detecteaza modificari neautorizate in fisiere critice (AIDE, audit rules, GitOps, checksums).",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-8.2.a",
+                    "title": "AIDE Status",
+                    "command": "command -v aide 2>/dev/null && aide --version || true; ls -la /etc/aide 2>/dev/null || true; ls -la /var/lib/aide 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-9.1",
+            "title": "Segregare si minimizare expunere la nivel retea",
+            "category": "Network Security",
+            "rationale": "Serviciile sunt separate pe retele/zone unde e posibil si nu sunt expuse inutil public.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-9.1.a",
+                    "title": "Network Routes/IPs",
+                    "command": "ip a; ip r",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-9.1.b",
+                    "title": "Docker Exposure",
+                    "command": "if command -v docker >/dev/null 2>&1; then docker ps --format 'table {{.Names}}\\t{{.Ports}}\\t{{.Image}}'; docker network ls; else echo \"SKIP_DOCKER\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-9.1.M1",
+                    "title": "Diagrama de retea si segmentare",
+                    "instructions": "Incarcati diagrama de retea, detalii despre VLAN-uri si reguli de perimetru (DMZ).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-9.2",
+            "title": "Hardening kernel si sysctl de baza",
+            "category": "Secure Configuration",
+            "rationale": "Sunt aplicate setari sysctl relevante pentru reducerea riscului (rp_filter, accept_redirects, etc).",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-9.2.a",
+                    "title": "Sysctl dump",
+                    "command": "sysctl -a 2>/dev/null | sed -n '1,200p' || true; ls -la /etc/sysctl.conf /etc/sysctl.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-10.1",
+            "title": "Dezactivare servicii inutile",
+            "category": "Secure Configuration",
+            "rationale": "Serviciile nefolosite sunt dezactivate si pachetele inutile sunt eliminate.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-10.1.a",
+                    "title": "List enabled services",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-unit-files --type=service --state=enabled; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-10.1.b",
+                    "title": "Risky services presence",
+                    "command": "for s in telnetd rsh-server rlogin vsftpd tftp; do systemctl status \"$s\" --no-pager 2>/dev/null && echo \"FOUND:$s\"; done || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-11.1",
+            "title": "Incident response si colectare dovezi",
+            "category": "Incident Management",
+            "rationale": "Exista capacitate de a colecta rapid dovezi (procese, conexiuni, loguri), si un flux IR definit.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-11.1.a",
+                    "title": "Live triage bundle",
+                    "command": "echo \"== UPTIME ==\"; uptime; echo \"== USERS ==\"; who; echo \"== TOP PROCS ==\"; ps aux --sort=-%cpu | head -n 30; echo \"== NET ==\"; ss -antup 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-11.1.M1",
+                    "title": "Procedura IR",
+                    "instructions": "Documentati procedura de Incident Response, rolurile, timpii tinta si canalele de comunicare.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-11.2",
+            "title": "Notificare incidente si trasabilitate",
+            "category": "Incident Management",
+            "rationale": "Exista un mecanism de inregistrare, clasificare si urmarire a incidentelor, inclusiv post-mortem.",
+            "severity": "MEDIUM",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-11.2.M1",
+                    "title": "Registru incidente",
+                    "instructions": "Furnizati exemple de tichete, timeline incidents, rapoarte post-mortem si politica de raportare.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "requiresApproval": false
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-12.1",
+            "title": "Supply chain si dependinte (SBOM)",
+            "category": "Supply Chain Security",
+            "rationale": "Sunt cunoscute dependintele (pachete, imagini container), sursele, si exista verificari de baza.",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-12.1.a",
+                    "title": "Docker images inventory",
+                    "command": "if command -v docker >/dev/null 2>&1; then docker images --digests; else echo \"SKIP_DOCKER\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-12.1.b",
+                    "title": "Container runtime info",
+                    "command": "if command -v docker >/dev/null 2>&1; then docker info 2>/dev/null | sed -n '1,120p'; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-12.1.M1",
+                    "title": "Registru furnizori",
+                    "instructions": "Documentati registrul de furnizori, procesul de selectie si evaluarea riscurilor asociate.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-13.1",
+            "title": "Separare privilegii pentru aplicatii",
+            "category": "Secure Configuration",
+            "rationale": "Aplicatiile ruleaza cu user dedicat, fara drepturi excesive, si cu permisiuni corecte pe fisiere.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-13.1.a",
+                    "title": "Service users info",
+                    "command": "ps -eo user,group,comm,args --sort=user | sed -n '1,120p'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-13.1.b",
+                    "title": "SUID/SGID files",
+                    "command": "find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-14.1",
+            "title": "Configurare DNS si rezolvare sigura",
+            "category": "Network Security",
+            "rationale": "Sunt configurate resolver-e corecte, iar hijacking-ul local este redus (hosts, resolv.conf, systemd-resolved).",
+            "severity": "LOW",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-14.1.a",
+                    "title": "Resolver config",
+                    "command": "cat /etc/resolv.conf 2>/dev/null || true; systemctl status systemd-resolved --no-pager 2>/dev/null || true; resolvectl status 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "NIS2-14.1.b",
+                    "title": "Hosts file content",
+                    "command": "cat /etc/hosts 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-15.1",
+            "title": "Conformitate configuratie (Drift Detection)",
+            "category": "Governance & Assurance",
+            "rationale": "Exista o referinta de configuratie (benchmark) si se detecteaza abaterile in timp.",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "NIS2-15.1.a",
+                    "title": "Config files hashes",
+                    "command": "for f in /etc/ssh/sshd_config /etc/passwd /etc/group /etc/sudoers /etc/sysctl.conf; do [ -f \"$f\" ] && { echo \"== $f ==\"; sha256sum \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "NIS2-16.1",
+            "title": "Managementul riscului, politici si responsabilitati",
+            "category": "Governance",
+            "rationale": "Exista politici si roluri (cine aproba, cine executa, cine verifica), plus un registru de riscuri.",
+            "severity": "MEDIUM",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-16.1.M1",
+                    "title": "Guvernanta si risc",
+                    "instructions": "Incarcati politica de securitate, rolurile si registrul de riscuri (inclusiv acceptare risc / plan tratament).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "NIS2-17.1",
+            "title": "Business continuity, BCP/DR si teste",
+            "category": "Business Continuity",
+            "rationale": "Exista plan BCP/DR, RTO/RPO, si teste periodice pentru scenarii critice.",
+            "severity": "HIGH",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "NIS2-17.1.M1",
+                    "title": "BCP/DR Evidence",
+                    "instructions": "Incarcati planul BCP/DR, valorile RTO/RPO si raportul ultimului test efectuat.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "requiresApproval": true
+                    }
+                }
+            ]
+        }
+    ]
+}

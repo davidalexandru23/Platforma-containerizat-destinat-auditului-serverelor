@@ -1,14 +1,15 @@
 # BitTrail Agent - Makefile
 
 BINARY_NAME=bittrail-agent
-VERSION=1.0.0
+VERSION=$(shell date +%Y.%m.%d)
 BUILD_DIR=build
+BACKEND_PUBLIC=../backend/public
 
 # Default target OS/ARCH (x86_64 Linux)
 GOOS=linux
 GOARCH=amd64
 
-.PHONY: all build build-linux build-all clean install test
+.PHONY: all build build-linux build-all clean install test publish publish-all
 
 # Build pentru x86_64 Linux (default)
 all: build
@@ -51,6 +52,28 @@ install: build
 	@sudo chmod +x /usr/local/bin/$(BINARY_NAME)
 	@echo "Installed to /usr/local/bin/$(BINARY_NAME)"
 
+# Publish - copiaza binarul in backend pentru download
+publish: build
+	@echo "Publishing agent to backend..."
+	@mkdir -p $(BACKEND_PUBLIC)
+	@cp $(BUILD_DIR)/$(BINARY_NAME) $(BACKEND_PUBLIC)/
+	@cp install.sh $(BACKEND_PUBLIC)/
+	@cp update.sh $(BACKEND_PUBLIC)/ 2>/dev/null || true
+	@echo '{"version":"$(VERSION)","buildDate":"$(shell date -u +%Y-%m-%dT%H:%M:%SZ)","arch":"linux-amd64"}' > $(BACKEND_PUBLIC)/agent-version.json
+	@echo "Published: version $(VERSION)"
+
+# Publish all architectures
+publish-all: build-all
+	@echo "Publishing all agent builds to backend..."
+	@mkdir -p $(BACKEND_PUBLIC)
+	@cp $(BUILD_DIR)/$(BINARY_NAME) $(BACKEND_PUBLIC)/bittrail-agent-linux-amd64
+	@cp $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 $(BACKEND_PUBLIC)/bittrail-agent-linux-arm64
+	@cp $(BUILD_DIR)/$(BINARY_NAME) $(BACKEND_PUBLIC)/bittrail-agent
+	@cp install.sh $(BACKEND_PUBLIC)/
+	@cp update.sh $(BACKEND_PUBLIC)/ 2>/dev/null || true
+	@echo '{"version":"$(VERSION)","buildDate":"$(shell date -u +%Y-%m-%dT%H:%M:%SZ)","architectures":["linux-amd64","linux-arm64"]}' > $(BACKEND_PUBLIC)/agent-version.json
+	@echo "Published: version $(VERSION) (amd64 + arm64)"
+
 # Test colectorii
 test:
 	@go run ./cmd/agent test
@@ -67,8 +90,11 @@ help:
 	@echo "  make build-linux  - Build explicit pentru Linux x86_64"
 	@echo "  make build-linux-arm64 - Build pentru Linux ARM64"
 	@echo "  make build-all    - Build pentru toate platformele"
+	@echo "  make publish      - Build si publica in backend (x86_64)"
+	@echo "  make publish-all  - Build si publica toate arhitecturile"
 	@echo "  make clean        - Sterge build directory"
 	@echo "  make install      - Instaleaza local"
 	@echo "  make test         - Testeaza colectorii"
 	@echo ""
 	@echo "Output: $(BUILD_DIR)/$(BINARY_NAME)"
+	@echo "Version: $(VERSION)"

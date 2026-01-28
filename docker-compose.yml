@@ -25,6 +25,8 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
     container_name: bittrail-backend
+    env_file:
+      - ./apps/backend/.env
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bittrail?schema=public
@@ -41,6 +43,7 @@ services:
     volumes:
       - evidence_files:/app/evidence
       - ./templates:/app/templates:ro
+      - ./apps/backend/public:/app/public:ro
 
   frontend:
     build:

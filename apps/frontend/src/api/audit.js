@@ -43,4 +43,9 @@ export const auditApi = {
         });
         return response.data;
     },
+
+    resetTask: async (runId, taskId) => {
+        const response = await client.post(`/audit/${runId}/manual/${taskId}/reset`);
+        return response.data;
+    },
 };

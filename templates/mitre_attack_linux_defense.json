@@ -1,0 +1,640 @@
+{
+    "$schema": "bittrail-template@1.0",
+    "metadata": {
+        "name": "MITRE ATT&CK - Linux Server Defensive Coverage (Telemetry + Detections)",
+        "description": "Template orientat pe acoperire defensiva MITRE ATT&CK pentru servere Linux. Include controale automatizabile prin agent (read-only) pentru a valida logging, auditd, procese, retea, integritate, si integrare cu SIEM/agent EDR.",
+        "version": "1.0.0",
+        "type": "CUSTOM",
+        "author": "BitTrail Platform",
+        "createdAt": "2026-01-27T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "TA0001-T1078",
+            "title": "Valid Accounts: monitorizare logins si conturi privilegiate",
+            "category": "Initial Access / Credential Abuse",
+            "description": "Tactic: TA0001, Technique: T1078 (Valid Accounts). Exista vizibilitate pe autentificari reusite/esuat si pe folosirea conturilor privilegiate (sudo/su).",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0001-T1078.a",
+                    "title": "auth_events_last_200",
+                    "command": "journalctl --no-pager -n 200 | grep -iE 'sshd|login|pam_unix|authentication|Failed password|Accepted password|Accepted publickey' | tail -n 200 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0001-T1078.b",
+                    "title": "sudo_events_last_200",
+                    "command": "journalctl --no-pager -n 500 | grep -iE 'sudo' | tail -n 200 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0001-T1078.c",
+                    "title": "privileged_groups",
+                    "command": "getent group sudo 2>/dev/null || true; getent group wheel 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0001-T1078.M1",
+                    "title": "Verificare reguli SIEM",
+                    "instructions": "Incarcati Reguli SIEM/EDR pentru: brute force, login din IP-uri noi, folosire sudo neobisnuita.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0001-T1190",
+            "title": "Exploit Public-Facing Application: inventar servicii expuse + loguri web",
+            "category": "Initial Access",
+            "description": "Tactic: TA0001, Technique: T1190 (Exploit Public-Facing Application). Serviciile expuse sunt inventariate, iar logurile aplicatiilor public-facing sunt colectate (nginx/apache/app logs).",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0001-T1190.a",
+                    "title": "listening_ports",
+                    "command": "ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0001-T1190.b",
+                    "title": "nginx_access_logs",
+                    "command": "ls -la /var/log/nginx 2>/dev/null || true; for f in /var/log/nginx/access.log /var/log/nginx/error.log; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 120 \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0001-T1190.c",
+                    "title": "apache_access_logs",
+                    "command": "ls -la /var/log/apache2 2>/dev/null || true; for f in /var/log/apache2/access.log /var/log/apache2/error.log; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 120 \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0001-T1190.M1",
+                    "title": "Verificare detectie web exploits",
+                    "instructions": "Incarcati Reguli detectie: spike 4xx/5xx, path traversal, webshell patterns, user-agent suspect.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0001-T1110",
+            "title": "Brute Force: limitare incercari + vizibilitate atac",
+            "category": "Initial Access",
+            "description": "Tactic: TA0001, Technique: T1110 (Brute Force). Exista protectie (faillock/fail2ban) si loguri pentru incercari repetate.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0001-T1110.a",
+                    "title": "faillock_conf",
+                    "command": "cat /etc/security/faillock.conf 2>/dev/null || true; grep -R \"pam_faillock\" -n /etc/pam.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0001-T1110.b",
+                    "title": "fail2ban_status",
+                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status; fail2ban-client status sshd 2>/dev/null || true; else echo \"SKIP_FAIL2BAN\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "TA0003-T1053",
+            "title": "Scheduled Task/Job: detectie persistenta prin cron/systemd timers",
+            "category": "Persistence",
+            "description": "Tactic: TA0003, Technique: T1053 (Scheduled Task/Job). Ai vizibilitate pe cronuri si systemd timers, inclusiv modificari.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0003-T1053.a",
+                    "title": "cron_dirs",
+                    "command": "ls -la /etc/cron.* 2>/dev/null || true; ls -la /var/spool/cron 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0003-T1053.b",
+                    "title": "systemd_timers",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-timers --all --no-pager; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0003-T1053.c",
+                    "title": "crontab_root",
+                    "command": "crontab -l 2>/dev/null || true; cat /etc/crontab 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0003-T1053.M1",
+                    "title": "Verificare detectie cron",
+                    "instructions": "Incarcati Regula detectie: aparitie cron nou in afara change window.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0003-T1543",
+            "title": "Create or Modify System Process: servicii systemd noi/modificate",
+            "category": "Persistence",
+            "description": "Tactic: TA0003, Technique: T1543 (Create or Modify System Process). Ai vizibilitate pe unit files (systemd) si servicii enable/start neobisnuit.",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0003-T1543.a",
+                    "title": "systemd_units_custom",
+                    "command": "ls -la /etc/systemd/system 2>/dev/null || true; find /etc/systemd/system -maxdepth 2 -type f -name '*.service' -o -name '*.timer' 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0003-T1543.b",
+                    "title": "enabled_services",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-unit-files --type=service --state=enabled --no-pager; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "TA0004-T1548",
+            "title": "Abuse Elevation Control Mechanism: sudo/suid/sgid vizibilitate",
+            "category": "Privilege Escalation",
+            "description": "Tactic: TA0004, Technique: T1548 (Abuse Elevation Control Mechanism). Exista vizibilitate pe sudo rules si pe fisiere SUID/SGID care pot fi abuzate.",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0004-T1548.a",
+                    "title": "sudoers_full",
+                    "command": "cat /etc/sudoers 2>/dev/null || true; ls -la /etc/sudoers.d 2>/dev/null || true; for f in /etc/sudoers.d/*; do [ -f \"$f\" ] && { echo \"--- $f\"; cat \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0004-T1548.b",
+                    "title": "suid_sgid_files",
+                    "command": "find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | head -n 250 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0004-T1548.M1",
+                    "title": "Verificare SUID review",
+                    "instructions": "Incarcati Proces de review pentru SUID/SGID + exceptii aprobate.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0005-T1562",
+            "title": "Impair Defenses: detectie oprire logging/EDR/auditd",
+            "category": "Defense Evasion",
+            "description": "Tactic: TA0005, Technique: T1562 (Impair Defenses). Se detecteaza oprirea journald/rsyslog/auditd/agent EDR si modificarile de config.",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0005-T1562.a",
+                    "title": "logging_services_status",
+                    "command": "systemctl status systemd-journald --no-pager 2>/dev/null || true; systemctl status rsyslog --no-pager 2>/dev/null || true; systemctl status auditd --no-pager 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0005-T1562.b",
+                    "title": "auditd_rules",
+                    "command": "auditctl -s 2>/dev/null || true; auditctl -l 2>/dev/null | head -n 220 || true; ls -la /etc/audit/rules.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0005-T1562.c",
+                    "title": "agent_presence_common",
+                    "command": "ps aux 2>/dev/null | grep -iE 'osquery|elastic-agent|falcon|crowdstrike|sentinel|defender|wazuh|sysmon' | grep -v grep | head -n 50 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0005-T1562.M1",
+                    "title": "Verificare alertare defense evasion",
+                    "instructions": "Incarcati Regula alertare: stop/disable auditd/rsyslog/EDR.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0005-T1070",
+            "title": "Indicator Removal on Host: stergere loguri si urme",
+            "category": "Defense Evasion",
+            "description": "Tactic: TA0005, Technique: T1070 (Indicator Removal on Host). Exista vizibilitate pe logrotate/retentie, plus detectie la stergere masiva loguri.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0005-T1070.a",
+                    "title": "logrotate_config",
+                    "command": "cat /etc/logrotate.conf 2>/dev/null || true; ls -la /etc/logrotate.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0005-T1070.b",
+                    "title": "varlog_recent",
+                    "command": "find /var/log -maxdepth 2 -type f -printf '%TY-%Tm-%Td %TH:%TM %p %s\\n' 2>/dev/null | sort -r | head -n 120 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0005-T1070.M1",
+                    "title": "Verificare log gaps",
+                    "instructions": "Incarcati Regula alertare: scadere brusca volum loguri / log gaps.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0006-T1003",
+            "title": "OS Credential Dumping: protectie /etc/shadow si detectie acces",
+            "category": "Credential Access",
+            "description": "Tactic: TA0006, Technique: T1003 (OS Credential Dumping). Fisierele de credentiale sunt protejate, iar accesul poate fi auditat (auditd).",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0006-T1003.a",
+                    "title": "shadow_perms",
+                    "command": "for f in /etc/shadow /etc/gshadow; do [ -f \"$f\" ] && stat -c '%n %U:%G %a' \"$f\"; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0006-T1003.b",
+                    "title": "audit_shadow_rules_presence",
+                    "command": "grep -R \"\\/etc\\/shadow\\|\\/etc\\/gshadow\" -n /etc/audit/rules.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0006-T1003.M1",
+                    "title": "Verificare detectie acces shadow",
+                    "instructions": "Incarcati Regula auditd/EDR: citire /etc/shadow de procese neobisnuite.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0007-T1082",
+            "title": "System Information Discovery: comenzi de discovery",
+            "category": "Discovery",
+            "description": "Tactic: TA0007, Technique: T1082 (System Information Discovery). Ai telemetrie (auditd/EDR) pentru comenzi de discovery folosite in atacuri, ca semnal de chain.",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0007-T1082.a",
+                    "title": "audit_execve_signal",
+                    "command": "auditctl -l 2>/dev/null | grep -i execve | head -n 120 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0007-T1082.b",
+                    "title": "shell_history_presence",
+                    "command": "for f in /root/.bash_history /home/*/.bash_history; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 60 \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "TA0007-T1046",
+            "title": "Network Service Discovery: scanare si servicii interne",
+            "category": "Discovery",
+            "description": "Tactic: TA0007, Technique: T1046 (Network Service Discovery). Ai vizibilitate pe conexiuni si tool-uri de scan (nmap, masscan) plus trafic suspect.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0007-T1046.a",
+                    "title": "installed_scan_tools",
+                    "command": "command -v nmap 2>/dev/null && nmap --version | head -n 5 || true; command -v masscan 2>/dev/null && masscan --version 2>/dev/null || true; command -v nc 2>/dev/null && nc -h 2>/dev/null | head -n 3 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0007-T1046.b",
+                    "title": "recent_connections",
+                    "command": "ss -antup 2>/dev/null | head -n 240 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "TA0008-T1021",
+            "title": "Remote Services: SSH lateral movement + restrictii",
+            "category": "Lateral Movement",
+            "description": "Tactic: TA0008, Technique: T1021 (Remote Services). SSH este harden-uit (fara root login, allowlist), iar logurile sunt colectate pentru lateral movement.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0008-T1021.a",
+                    "title": "sshd_key_settings",
+                    "command": "sshd -T 2>/dev/null | grep -E 'permitrootlogin|passwordauthentication|pubkeyauthentication|allowusers|allowgroups|loglevel|maxauthtries|clientaliveinterval|clientalivecountmax' || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0008-T1021.b",
+                    "title": "ssh_known_hosts_inventory",
+                    "command": "for f in /root/.ssh/known_hosts /home/*/.ssh/known_hosts; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 80 \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0008-T1021.M1",
+                    "title": "Verificare lateral movement",
+                    "instructions": "Incarcati Regula alertare: ssh login din host intern neasteptat / pivot.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0011-T1105",
+            "title": "Ingress Tool Transfer: download tool-uri (curl/wget) si detectie",
+            "category": "Command and Control",
+            "description": "Tactic: TA0011, Technique: T1105 (Ingress Tool Transfer). Se detecteaza descarcari de executabile/scripturi prin curl/wget si output suspicious.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0011-T1105.a",
+                    "title": "tools_presence",
+                    "command": "command -v curl 2>/dev/null && curl --version | head -n 2 || true; command -v wget 2>/dev/null && wget --version | head -n 2 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0011-T1105.b",
+                    "title": "downloads_dirs_recent",
+                    "command": "for d in /tmp /var/tmp /dev/shm; do [ -d \"$d\" ] && { echo \"== $d recent ==\"; find \"$d\" -maxdepth 2 -type f -printf '%TY-%Tm-%Td %TH:%TM %p %s\\n' 2>/dev/null | sort -r | head -n 120; }; done",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0011-T1105.M1",
+                    "title": "Verificare executie din tmp",
+                    "instructions": "Incarcati Regula detectie: executabil nou in /tmp, /dev/shm + rulare imediata.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0011-T1071",
+            "title": "Application Layer Protocol: C2 peste HTTP(S)/DNS si telemetrie",
+            "category": "Command and Control",
+            "description": "Tactic: TA0011, Technique: T1071 (Application Layer Protocol). Ai vizibilitate pe conexiuni outbound si (ideal) DNS logs pentru detectii C2 basic.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0011-T1071.a",
+                    "title": "dns_config",
+                    "command": "cat /etc/resolv.conf 2>/dev/null || true; systemctl status systemd-resolved --no-pager 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0011-T1071.b",
+                    "title": "outbound_connections_sample",
+                    "command": "ss -antup 2>/dev/null | awk 'NR<3 || /ESTAB/ {print}' | head -n 220 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0011-T1071.M1",
+                    "title": "Verificare DNS logging",
+                    "instructions": "Incarcati Dovada DNS logging (resolver central / SIEM) daca e cerut.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0010-T1041",
+            "title": "Exfiltration Over C2 Channel: detectie upload neobisnuit",
+            "category": "Exfiltration",
+            "description": "Tactic: TA0010, Technique: T1041 (Exfiltration Over C2 Channel). Ai semnale minime: conexiuni persistente, volum de date, procese care initiaza transfer.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0010-T1041.a",
+                    "title": "top_network_procs_basic",
+                    "command": "if command -v lsof >/dev/null 2>&1; then lsof -i -n -P | head -n 220; else echo \"SKIP_LSOF\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0010-T1041.M1",
+                    "title": "Verificare volum trafic",
+                    "instructions": "Incarcati Integrare NDR/Firewall logs pentru volum si destinatii.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "TA0040-T1486",
+            "title": "Data Encrypted for Impact: semnale ransomware",
+            "category": "Impact",
+            "description": "Tactic: TA0040, Technique: T1486 (Data Encrypted for Impact). Ai verificari preventive (backup) si semnale de detectie (procese ciudate, spike disk).",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "TA0040-T1486.a",
+                    "title": "backup_jobs_hint",
+                    "command": "grep -R \"restic\\|borg\\|rclone\\|rsync\\|backup\" -n /etc/cron.* /etc/crontab 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "TA0040-T1486.b",
+                    "title": "disk_usage_snapshot",
+                    "command": "df -h; iostat -x 1 3 2>/dev/null || echo \"SKIP_IOSTAT\"",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "TA0040-T1486.M1",
+                    "title": "Verificare restore",
+                    "instructions": "Incarcati Dovada restore test (data + rezultat).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "COVERAGE-LOG-01",
+            "title": "Logging Core: journald/rsyslog activ + retentie minim 30 zile",
+            "category": "Telemetry Baseline",
+            "description": "Fara loguri consistente, ATT&CK coverage e fake. Verificam ca pipeline-ul de logging e activ si are retentie minima.",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "COVERAGE-LOG-01.a",
+                    "title": "journald_conf",
+                    "command": "journalctl --disk-usage 2>/dev/null || true; cat /etc/systemd/journald.conf 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "COVERAGE-LOG-01.b",
+                    "title": "rsyslog_status",
+                    "command": "systemctl status rsyslog --no-pager 2>/dev/null || true; ls -la /etc/rsyslog.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "COVERAGE-LOG-02",
+            "title": "Process Creation: auditd/EDR pentru executii (execve)",
+            "category": "Telemetry Baseline",
+            "description": "Ai nevoie de proces creation pentru detectii reale (curl/wget/nc/bash -c, etc.).",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "COVERAGE-LOG-02.a",
+                    "title": "auditd_status",
+                    "command": "systemctl status auditd --no-pager 2>/dev/null || true; auditctl -s 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "COVERAGE-LOG-02.b",
+                    "title": "audit_rules_preview",
+                    "command": "auditctl -l 2>/dev/null | head -n 220 || true; for f in /etc/audit/rules.d/*; do [ -f \"$f\" ] && { echo \"--- $f\"; sed -n '1,160p' \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "COVERAGE-LOG-02.M1",
+                    "title": "Verificare SIEM integration",
+                    "instructions": "Incarcati Mapping: ce evenimente ajung in SIEM (process start, user, tty, cwd, hash daca exista).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "COVERAGE-NET-01",
+            "title": "Network Telemetry: conexiuni inbound/outbound si porturi ascultate",
+            "category": "Telemetry Baseline",
+            "description": "Minim: ce asculta, cine se conecteaza, conexiuni persistente.",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "COVERAGE-NET-01.a",
+                    "title": "ports_and_procs",
+                    "command": "ss -lntup 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "COVERAGE-NET-01.b",
+                    "title": "established_sample",
+                    "command": "ss -antup 2>/dev/null | grep ESTAB | head -n 220 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "COVERAGE-INTEGRITY-01",
+            "title": "File Integrity: detectie modificari in fisiere critice",
+            "category": "Telemetry Baseline",
+            "description": "Pentru persistence/defense evasion: ai nevoie de integritate pe fisiere critice (/etc/ssh, sudoers, systemd).",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "COVERAGE-INTEGRITY-01.a",
+                    "title": "critical_hashes",
+                    "command": "for f in /etc/ssh/sshd_config /etc/sudoers /etc/passwd /etc/shadow /etc/crontab /etc/sysctl.conf; do [ -f \"$f\" ] && { echo \"== $f ==\"; sha256sum \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "COVERAGE-INTEGRITY-01.M1",
+                    "title": "Verificare FIM",
+                    "instructions": "Incarcati Dovada FIM (AIDE/Wazuh/Tripwire/osquery) daca e implementat.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "COVERAGE-TIME-01",
+            "title": "Time Sync: NTP activ pentru corelare evenimente",
+            "category": "Telemetry Baseline",
+            "description": "Fara timp corect, corelarea in SIEM e varza.",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "COVERAGE-TIME-01.a",
+                    "title": "timesyncd_status",
+                    "command": "timedatectl 2>/dev/null || true; systemctl status systemd-timesyncd --no-pager 2>/dev/null || true; chronyc tracking 2>/dev/null || true; ntpq -p 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "DETECT-01",
+            "title": "Detections Pack: reguli minime recomandate",
+            "category": "Detections",
+            "description": "Set minim de reguli in SIEM/EDR pentru Linux care acopera cele mai comune chain-uri ATT&CK.",
+            "severity": "HIGH",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "DETECT-01.M1",
+                    "title": "Verificare reguli detectie",
+                    "instructions": "Incarcati dovezi pentru: Brute force SSH, New cron, sudo neobisnuit, curl | bash, modificare sshd_config, outbound ciudat, stop auditd.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        }
+    ]
+}

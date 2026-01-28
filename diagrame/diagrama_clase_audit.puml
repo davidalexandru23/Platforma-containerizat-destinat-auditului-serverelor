@@ -7,12 +7,14 @@ skinparam classAttributeIconSize 0
 skinparam nodesep 40
 skinparam ranksep 30
 
-title Diagrama de Clase - Obiecte Audit
+title Diagrama de Clase - Entitati Audit
 
-class AuditTemplate {
+class Template {
     id: UUID
     name: String
-    type: Enum
+    description: String
+    type: TemplateType
+    isBuiltIn: Boolean
     --
     getVersions()
 }
@@ -20,6 +22,8 @@ class AuditTemplate {
 class TemplateVersion {
     id: UUID
     version: String
+    changelog: String
+    isActive: Boolean
     --
     getControls()
 }
@@ -28,68 +32,104 @@ class Control {
     id: UUID
     controlId: String
     title: String
-    severity: Enum
+    category: String
+    severity: Severity
+    rationale: String
     --
     getChecks()
 }
 
 class AutomatedCheck {
     id: UUID
+    checkId: String
+    title: String
     command: String
+    script: String
     expectedResult: String
+    checkType: String
+    comparison: String
+    parser: String
     --
     execute()
 }
 
 class ManualCheck {
     id: UUID
+    checkId: String
+    title: String
     instructions: String
-    evidenceRequired: Bool
+}
+
+class EvidenceSpec {
+    id: UUID
+    allowUpload: Boolean
+    allowLink: Boolean
+    allowAttestation: Boolean
+    requiresApproval: Boolean
+    acceptedFileTypes: String[]
 }
 
 class AuditRun {
     id: UUID
-    status: Enum
+    status: AuditStatus
     startedAt: DateTime
-    scorePercent: Float
+    completedAt: DateTime
+    automatedCompliancePercent: Float
+    manualCompletionPercent: Float
+    overallStatus: ComplianceStatus
+    excludedControlIds: String[]
     --
     complete()
 }
 
 class CheckResult {
     id: UUID
-    status: Enum
+    status: CheckStatus
     output: String
+    errorMessage: String
+    executedAt: DateTime
 }
 
-class ManualTask {
+class ManualTaskResult {
     id: UUID
-    status: Enum
-    notes: String
+    status: ManualTaskStatus
+    assignedTo: String
+    reviewedBy: String
+    reviewedAt: DateTime
+    reviewNotes: String
     --
     approve()
 }
 
 class Evidence {
     id: UUID
+    type: EvidenceType
     filePath: String
+    fileName: String
+    fileSize: Int
     mimeType: String
+    fileHash: String
+    link: String
+    attestation: String
+    uploadedBy: String
 }
 
 class Server {
     id: UUID
     name: String
     hostname: String
-    status: Enum
+    ipAddress: String
+    status: ServerStatus
 }
 
 ' Relatii - rand 1
-AuditTemplate "1" -- "*" TemplateVersion
+Template "1" -- "*" TemplateVersion
 TemplateVersion "1" -- "*" Control
 
 ' Relatii - rand 2
 Control "1" -- "*" AutomatedCheck
 Control "1" -- "*" ManualCheck
+ManualCheck "1" -- "0..1" EvidenceSpec
 
 ' Relatii - rand 3
 AuditRun "*" -- "1" TemplateVersion
@@ -97,9 +137,9 @@ AuditRun "*" -- "1" Server
 
 ' Relatii - rand 4
 AuditRun "1" -- "*" CheckResult
-AuditRun "1" -- "*" ManualTask
+AuditRun "1" -- "*" ManualTaskResult
 CheckResult "*" -- "1" AutomatedCheck
-ManualTask "*" -- "1" ManualCheck
-ManualTask "1" -- "*" Evidence
+ManualTaskResult "*" -- "1" ManualCheck
+ManualTaskResult "1" -- "*" Evidence
 
 @enduml

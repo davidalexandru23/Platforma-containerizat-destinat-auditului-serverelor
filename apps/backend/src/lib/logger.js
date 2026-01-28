@@ -61,7 +61,7 @@ const log = {
     },
 };
 
-// Middleware pentru logging request-uri HTTP
+// Middleware pentru logare cereri HTTP
 const requestLogger = (req, res, next) => {
     const start = Date.now();
 
@@ -73,4 +73,4 @@ const requestLogger = (req, res, next) => {
     next();
 };
 
-module.exports = { log, requestLogger };
+export { log, requestLogger };

@@ -16,31 +16,44 @@ rectangle "Platforma BitTrail" {
     rectangle "Autentificare" {
         usecase "Login" as UC1
         usecase "Logout" as UC2
+        usecase "Inregistrare" as UC3
     }
     
     rectangle "Gestiune Servere" {
-        usecase "Adauga Server" as UC3
-        usecase "Vizualizeaza Servere" as UC4
-        usecase "Sterge Server" as UC5
-        usecase "Genereaza Token" as UC6
+        usecase "Adauga Server" as UC4
+        usecase "Vizualizeaza Servere" as UC5
+        usecase "Sterge Server" as UC6
+        usecase "Genereaza Token Enrollment" as UC7
+        usecase "Vizualizeaza Metrici Live" as UC8
+        usecase "Vizualizeaza Inventar" as UC9
     }
     
-    rectangle "Gestiune Template" {
-        usecase "Import Template" as UC7
-        usecase "Vizualizeaza Template" as UC8
+    rectangle "Gestiune Template-uri" {
+        usecase "Import Template CIS" as UC10
+        usecase "Vizualizeaza Template" as UC11
+        usecase "Editeaza Controale" as UC12
     }
     
     rectangle "Executie Audit" {
-        usecase "Initiaza Audit" as UC9
-        usecase "Incarca Evidenta" as UC10
-        usecase "Aproba Task" as UC11
-        usecase "Vizualizeaza Rezultate" as UC12
+        usecase "Initiaza Audit" as UC13
+        usecase "Vizualizeaza Progres Audit" as UC14
+        usecase "Incarca Evidenta" as UC15
+        usecase "Aproba Task Manual" as UC16
+        usecase "Vizualizeaza Rezultate" as UC17
+    }
+    
+    rectangle "Gestiune Utilizatori" {
+        usecase "Creeaza Utilizator" as UC18
+        usecase "Atribuie Rol" as UC19
+        usecase "Gestioneaza Permisiuni" as UC20
     }
     
     rectangle "Comunicare Agent" {
-        usecase "Inrolare" as UC13
-        usecase "Trimite Metrici" as UC14
-        usecase "Executa Verificari" as UC15
+        usecase "Inrolare Agent" as UC21
+        usecase "Trimite Metrici" as UC22
+        usecase "Trimite Inventar" as UC23
+        usecase "Executa Verificari" as UC24
+        usecase "Trimite Rezultate" as UC25
     }
 }
 
@@ -56,25 +69,40 @@ Admin --> UC9
 Admin --> UC10
 Admin --> UC11
 Admin --> UC12
+Admin --> UC13
+Admin --> UC14
+Admin --> UC15
+Admin --> UC16
+Admin --> UC17
+Admin --> UC18
+Admin --> UC19
+Admin --> UC20
 
 ' Auditor - audit si vizualizare
 Auditor --> UC1
-Auditor --> UC4
+Auditor --> UC5
 Auditor --> UC8
 Auditor --> UC9
-Auditor --> UC10
 Auditor --> UC11
-Auditor --> UC12
+Auditor --> UC13
+Auditor --> UC14
+Auditor --> UC15
+Auditor --> UC16
+Auditor --> UC17
 
 ' Viewer - doar vizualizare
 Viewer --> UC1
-Viewer --> UC4
+Viewer --> UC5
 Viewer --> UC8
-Viewer --> UC12
+Viewer --> UC11
+Viewer --> UC14
+Viewer --> UC17
 
 ' Agent - comunicare
-Agent --> UC13
-Agent --> UC14
-Agent --> UC15
+Agent --> UC21
+Agent --> UC22
+Agent --> UC23
+Agent --> UC24
+Agent --> UC25
 
 @enduml

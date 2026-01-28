@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/client';
+import AutomatedCheckEditor from '../components/TemplateEditor/AutomatedCheckEditor';
 
 function Templates() {
     const { id: urlTemplateId } = useParams();
@@ -21,10 +22,10 @@ function Templates() {
         loadPredefinedTemplates();
     }, []);
 
-    // handle URL param pt acces direct template
+    // Manipulare parametru URL pentru accesare directa sablon
     useEffect(() => {
         if (urlTemplateId && templates.length > 0) {
-            // selecteaza doar daca nu e deja selectat
+            // Selectare doar daca nu este deja selectat
             if (!selectedTemplate || selectedTemplate.id !== urlTemplateId) {
                 const template = templates.find(t => t.id === urlTemplateId);
                 if (template) {
@@ -54,7 +55,7 @@ function Templates() {
         }
     };
 
-    // lista combinata toate templateurile
+    // Lista combinata toate sabloanele
     const getAllTemplates = () => {
         const saved = templates.map(t => ({ ...t, source: 'saved' }));
         const predefined = predefinedTemplates.map(pt => ({
@@ -98,12 +99,12 @@ function Templates() {
     };
 
     const handleSelectTemplate = async (template) => {
-        // Ensure source is preserved
+        // Asigurare pastrare sursa
         const templateWithSource = { ...template, source: template.source || 'saved' };
         setSelectedTemplate(templateWithSource);
 
         if (templateWithSource.source === 'predefined') {
-            // Load controls from predefined JSON
+            // Incarcare controale din JSON predefinit
             try {
                 const response = await api.get(`/templates/predefined/${templateWithSource.filename}`);
                 setSelectedTemplateControls(response.data?.controls || []);
@@ -112,12 +113,12 @@ function Templates() {
                 setSelectedTemplateControls([]);
             }
         } else {
-            // Load controls from saved template
+            // Incarcare controale din sablon salvat
             try {
                 const response = await api.get(`/templates/${templateWithSource.id}`);
                 const version = response.data?.versions?.[0];
                 setSelectedTemplateControls(version?.controls || []);
-                // Update with full data but keep source
+                // Actualizare cu date complete dar pastrare sursa
                 setSelectedTemplate({ ...response.data, source: 'saved' });
             } catch (e) {
                 console.error('Error loading template controls:', e);
@@ -125,7 +126,7 @@ function Templates() {
             }
         }
 
-        // Update URL only if needed to avoid triggering useEffect loop
+        // Actualizare URL doar daca este necesar pentru evitare bucla useEffect
         if (templateWithSource.source === 'saved' && urlTemplateId !== templateWithSource.id) {
             navigate(`/templates/${templateWithSource.id}`, { replace: true });
         } else if (templateWithSource.source === 'predefined' && urlTemplateId) {
@@ -417,14 +418,9 @@ function Templates() {
                             </h3>
                             {selectedTemplateControls.length > 0 ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {selectedTemplateControls.slice(0, 20).map((control, i) => (
+                                    {selectedTemplateControls.map((control, i) => (
                                         <ControlCard key={i} control={control} />
                                     ))}
-                                    {selectedTemplateControls.length > 20 && (
-                                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem', padding: '1rem' }}>
-                                            ...si inca {selectedTemplateControls.length - 20} controale
-                                        </p>
-                                    )}
                                 </div>
                             ) : (
                                 <div className="empty-state">
@@ -464,9 +460,14 @@ function Templates() {
                 <CreateTemplateModal
                     predefinedTemplates={predefinedTemplates}
                     onClose={() => setShowCreateModal(false)}
-                    onSuccess={() => {
+                    onSuccess={async (createdTemplate) => {
                         setShowCreateModal(false);
-                        loadTemplates();
+                        await loadTemplates();
+                        // Deschidere editor automat dupa creare
+                        if (createdTemplate) {
+                            handleSelectTemplate(createdTemplate);
+                            setShowEditModal(true);
+                        }
                     }}
                 />
             )}
@@ -585,16 +586,19 @@ function CreateTemplateModal({ predefinedTemplates, onClose, onSuccess }) {
         setError('');
 
         try {
+            let createdTemplate = null;
             if (selectedPredefined) {
                 const contentRes = await api.get(`/templates/predefined/${selectedPredefined}`);
                 const content = contentRes.data;
                 if (formData.name) content.metadata.name = formData.name;
                 if (formData.description) content.metadata.description = formData.description;
-                await api.post('/templates/importJson', content);
+                const result = await api.post('/templates/importJson', content);
+                createdTemplate = result.data?.template;
             } else {
-                await api.post('/templates', formData);
+                const result = await api.post('/templates', formData);
+                createdTemplate = result.data;
             }
-            onSuccess();
+            onSuccess(createdTemplate);
         } catch (err) {
             setError(err.response?.data?.message || 'Eroare la creare template');
         } finally {
@@ -636,43 +640,26 @@ function CreateTemplateModal({ predefinedTemplates, onClose, onSuccess }) {
                             </div>
                         )}
 
-                        {!selectedPredefined && (
-                            <>
-                                <div className="form-group">
-                                    <label className="form-label">Nume Template</label>
-                                    <input
-                                        type="text"
-                                        className="input"
-                                        value={formData.name}
-                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                        required={!selectedPredefined}
-                                        placeholder="ex: Audit Securitate Baza"
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Descriere</label>
-                                    <textarea
-                                        className="input"
-                                        value={formData.description}
-                                        onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                        placeholder="Descrierea scopului acestui template..."
-                                        rows={3}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Tip Standard</label>
-                                    <select
-                                        className="input"
-                                        value={formData.type}
-                                        onChange={e => setFormData({ ...formData, type: e.target.value })}
-                                    >
-                                        <option value="CUSTOM">Custom</option>
-                                        <option value="CIS_BENCHMARK">CIS Benchmark</option>
-                                        <option value="CIS_CONTROLS">CIS Controls</option>
-                                    </select>
-                                </div>
-                            </>
-                        )}
+                        <div className="form-group">
+                            <label className="form-label">Nume Template</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={formData.name}
+                                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                placeholder={selectedPredefined ? '(optional - lasa gol pentru numele original)' : 'ex: Audit Securitate Baza'}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Descriere</label>
+                            <textarea
+                                className="input"
+                                value={formData.description}
+                                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                                placeholder={selectedPredefined ? '(optional - lasa gol pentru descrierea originala)' : 'Descrierea scopului acestui template...'}
+                                rows={3}
+                            />
+                        </div>
                     </div>
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={onClose}>
@@ -801,11 +788,11 @@ function AddControlModal({ show, onClose, onAdd, predefinedTemplates }) {
         manualChecks: []
     });
 
-    // Catalog filtering
+    // Filtrare catalog
     const [filters, setFilters] = useState({ severity: 'ALL', standard: 'ALL', os: 'ALL' });
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Fetch catalog controls when tab is active
+    // Preluare controale catalog cand tab-ul este activ
     useEffect(() => {
         if (activeTab === 'catalog' && predefinedTemplates.length > 0 && catalogControls.length === 0) {
             const fetchCatalog = async () => {
@@ -846,7 +833,7 @@ function AddControlModal({ show, onClose, onAdd, predefinedTemplates }) {
 
     const handleAddCatalog = () => {
         if (selectedCatalogControl) {
-            onAdd({ ...selectedCatalogControl }); // Copy control
+            onAdd({ ...selectedCatalogControl }); // Copiere control
             onClose();
         }
     };
@@ -878,7 +865,7 @@ function AddControlModal({ show, onClose, onAdd, predefinedTemplates }) {
                 <div className="modal-body" style={{ flex: 1, overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     {activeTab === 'catalog' ? (
                         <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
-                            {/* Filters Sidebar */}
+                            {/* Bara laterala filtre */}
                             <div style={{ width: '220px', flexShrink: 0, borderRight: '1px solid var(--border-light)', paddingRight: '1rem', overflowY: 'auto' }}>
                                 <h4 style={{ marginBottom: '1rem' }}>Filtre</h4>
                                 <div className="form-group mb-md">
@@ -897,7 +884,7 @@ function AddControlModal({ show, onClose, onAdd, predefinedTemplates }) {
                                 </div>
                             </div>
 
-                            {/* Catalog List */}
+                            {/* Lista catalog */}
                             <div style={{ flex: 1, overflowY: 'auto' }}>
                                 {loadingCatalog ? (
                                     <div className="empty-state">
@@ -978,7 +965,7 @@ function ControlEditorModal({ control, onSave, onClose }) {
     const [editedControl, setEditedControl] = useState({ ...control });
     const [activeTab, setActiveTab] = useState('general');
 
-    // Helper for nested updates
+    // Functie ajutatoare pentru actualizari imbricate
     const updateControl = (field, value) => setEditedControl(prev => ({ ...prev, [field]: value }));
 
     return (
@@ -1047,83 +1034,47 @@ function ControlEditorModal({ control, onSave, onClose }) {
                                 </button>
                             </div>
                             {editedControl.automatedChecks?.map((check, idx) => (
-                                <div key={idx} className="card mb-md" style={{ background: 'var(--bg-light)' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '1rem' }}>
-                                        <div className="form-group">
+                                <div key={idx} className="card mb-md" style={{ background: 'var(--bg-light)', padding: '1rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border-light)', pb: '0.5rem' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
                                             <label className="form-label">ID Check</label>
-                                            <input className="input" value={check.checkId} onChange={e => {
-                                                const updated = [...editedControl.automatedChecks];
-                                                updated[idx].checkId = e.target.value;
-                                                updateControl('automatedChecks', updated);
-                                            }} />
+                                            <input
+                                                className="input"
+                                                style={{ width: '150px' }}
+                                                value={check.checkId}
+                                                onChange={e => {
+                                                    const updated = [...editedControl.automatedChecks];
+                                                    updated[idx].checkId = e.target.value;
+                                                    updateControl('automatedChecks', updated);
+                                                }}
+                                            />
                                         </div>
-                                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                        <div className="form-group" style={{ marginBottom: 0, flex: 1, marginLeft: '1rem' }}>
                                             <label className="form-label">Titlu</label>
-                                            <input className="input" value={check.title} onChange={e => {
-                                                const updated = [...editedControl.automatedChecks];
-                                                updated[idx].title = e.target.value;
-                                                updateControl('automatedChecks', updated);
-                                            }} />
+                                            <input
+                                                className="input"
+                                                value={check.title}
+                                                onChange={e => {
+                                                    const updated = [...editedControl.automatedChecks];
+                                                    updated[idx].title = e.target.value;
+                                                    updateControl('automatedChecks', updated);
+                                                }}
+                                            />
                                         </div>
-                                        <div className="form-group" style={{ gridColumn: 'span 3' }}>
-                                            <label className="form-label">Comanda (Shell)</label>
-                                            <textarea className="input font-mono" rows={3} value={check.command} onChange={e => {
-                                                const updated = [...editedControl.automatedChecks];
-                                                updated[idx].command = e.target.value;
-                                                updateControl('automatedChecks', updated);
-                                            }} />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Operator</label>
-                                            <select className="input" value={check.comparison || 'EQUALS'} onChange={e => {
-                                                const updated = [...editedControl.automatedChecks];
-                                                updated[idx].comparison = e.target.value;
-                                                updateControl('automatedChecks', updated);
-                                            }}>
-                                                <option value="EQUALS">Egal (String)</option>
-                                                <option value="CONTAINS">Contine</option>
-                                                <option value="REGEX">Regex Match</option>
-                                                <option value="NUM_EQ">Egal (Numeric)</option>
-                                                <option value="NUM_GE">Mai mare sau egal</option>
-                                                <option value="NUM_LE">Mai mic sau egal</option>
-                                                <option value="EXIT_CODE">Exit Code</option>
-                                            </select>
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Valoare Asteptata</label>
-                                            <input className="input" value={check.expectedResult} onChange={e => {
-                                                const updated = [...editedControl.automatedChecks];
-                                                updated[idx].expectedResult = e.target.value;
-                                                updateControl('automatedChecks', updated);
-                                            }} />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Parser</label>
-                                            <select className="input" value={check.parser || 'RAW'} onChange={e => {
-                                                const updated = [...editedControl.automatedChecks];
-                                                updated[idx].parser = e.target.value;
-                                                updateControl('automatedChecks', updated);
-                                            }}>
-                                                <option value="RAW">Raw Output</option>
-                                                <option value="JSON">JSON</option>
-                                                <option value="INT">Integer</option>
-                                            </select>
-                                        </div>
-                                        <div className="form-group" style={{ gridColumn: 'span 3' }}>
-                                            <label className="form-label">Mesaj Eroare (Optional)</label>
-                                            <input className="input" value={check.onFailMessage || ''} placeholder="Mesaj afisat cand check-ul esueaza" onChange={e => {
-                                                const updated = [...editedControl.automatedChecks];
-                                                updated[idx].onFailMessage = e.target.value;
-                                                updateControl('automatedChecks', updated);
-                                            }} />
-                                        </div>
-                                        <div className="form-group" style={{ gridColumn: 'span 3', textAlign: 'right' }}>
-                                            <button className="btn btn-sm btn-danger" onClick={() => {
-                                                const updated = editedControl.automatedChecks.filter((_, i) => i !== idx);
-                                                updateControl('automatedChecks', updated);
-                                            }}>Sterge Check</button>
-                                        </div>
+                                        <button className="btn btn-sm btn-danger" style={{ height: 'fit-content', alignSelf: 'flex-end' }} onClick={() => {
+                                            const updated = editedControl.automatedChecks.filter((_, i) => i !== idx);
+                                            updateControl('automatedChecks', updated);
+                                        }}>Sterge Check</button>
                                     </div>
+
+                                    <AutomatedCheckEditor
+                                        check={check}
+                                        onChange={(newVal) => {
+                                            const updated = [...editedControl.automatedChecks];
+                                            updated[idx] = newVal;
+                                            updateControl('automatedChecks', updated);
+                                        }}
+                                    />
                                 </div>
                             ))}
                         </div>
@@ -1145,66 +1096,47 @@ function ControlEditorModal({ control, onSave, onClose }) {
                                 </button>
                             </div>
                             {editedControl.manualChecks?.map((check, idx) => (
-                                <div key={idx} className="card mb-md" style={{ background: 'var(--bg-light)' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
-                                        <div className="form-group">
+                                <div key={idx} className="card mb-md" style={{ background: 'var(--bg-light)', padding: '1rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border-light)', pb: '0.5rem' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
                                             <label className="form-label">ID Task</label>
-                                            <input className="input" value={check.checkId} onChange={e => {
-                                                const updated = [...editedControl.manualChecks];
-                                                updated[idx].checkId = e.target.value;
-                                                updateControl('manualChecks', updated);
-                                            }} />
+                                            <input
+                                                className="input"
+                                                style={{ width: '150px' }}
+                                                value={check.checkId}
+                                                onChange={e => {
+                                                    const updated = [...editedControl.manualChecks];
+                                                    updated[idx].checkId = e.target.value;
+                                                    updateControl('manualChecks', updated);
+                                                }}
+                                            />
                                         </div>
-                                        <div className="form-group">
+                                        <div className="form-group" style={{ marginBottom: 0, flex: 1, marginLeft: '1rem' }}>
                                             <label className="form-label">Titlu</label>
-                                            <input className="input" value={check.title} onChange={e => {
-                                                const updated = [...editedControl.manualChecks];
-                                                updated[idx].title = e.target.value;
-                                                updateControl('manualChecks', updated);
-                                            }} />
-                                        </div>
-                                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                            <label className="form-label">Instructiuni</label>
-                                            <textarea className="input" rows={3} value={check.instructions} onChange={e => {
-                                                const updated = [...editedControl.manualChecks];
-                                                updated[idx].instructions = e.target.value;
-                                                updateControl('manualChecks', updated);
-                                            }} />
-                                        </div>
-                                        {/* Evidence Spec Toggles */}
-                                        <div className="form-group" style={{ gridColumn: 'span 2', display: 'flex', gap: '1.5rem', marginTop: '0.5rem' }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                                                <input type="checkbox" checked={check.evidenceSpec?.allowUpload} onChange={e => {
+                                            <input
+                                                className="input"
+                                                value={check.title}
+                                                onChange={e => {
                                                     const updated = [...editedControl.manualChecks];
-                                                    updated[idx].evidenceSpec = { ...updated[idx].evidenceSpec, allowUpload: e.target.checked };
+                                                    updated[idx].title = e.target.value;
                                                     updateControl('manualChecks', updated);
-                                                }} />
-                                                Allow Upload
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                                                <input type="checkbox" checked={check.evidenceSpec?.allowLink} onChange={e => {
-                                                    const updated = [...editedControl.manualChecks];
-                                                    updated[idx].evidenceSpec = { ...updated[idx].evidenceSpec, allowLink: e.target.checked };
-                                                    updateControl('manualChecks', updated);
-                                                }} />
-                                                Allow Link
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                                                <input type="checkbox" checked={check.evidenceSpec?.requiresApproval} onChange={e => {
-                                                    const updated = [...editedControl.manualChecks];
-                                                    updated[idx].evidenceSpec = { ...updated[idx].evidenceSpec, requiresApproval: e.target.checked };
-                                                    updateControl('manualChecks', updated);
-                                                }} />
-                                                Requires Approval
-                                            </label>
+                                                }}
+                                            />
                                         </div>
-                                        <div className="form-group" style={{ gridColumn: 'span 2', textAlign: 'right', marginTop: '0.5rem' }}>
-                                            <button className="btn btn-sm btn-danger" onClick={() => {
-                                                const updated = editedControl.manualChecks.filter((_, i) => i !== idx);
-                                                updateControl('manualChecks', updated);
-                                            }}>Sterge Task</button>
-                                        </div>
+                                        <button className="btn btn-sm btn-danger" style={{ height: 'fit-content', alignSelf: 'flex-end' }} onClick={() => {
+                                            const updated = editedControl.manualChecks.filter((_, i) => i !== idx);
+                                            updateControl('manualChecks', updated);
+                                        }}>Sterge Task</button>
                                     </div>
+
+                                    <ManualCheckEditor
+                                        check={check}
+                                        onChange={(newVal) => {
+                                            const updated = [...editedControl.manualChecks];
+                                            updated[idx] = newVal;
+                                            updateControl('manualChecks', updated);
+                                        }}
+                                    />
                                 </div>
                             ))}
                         </div>
@@ -1221,24 +1153,24 @@ function ControlEditorModal({ control, onSave, onClose }) {
 }
 
 function EditTemplateModal({ template, controls, onClose, onSuccess, predefinedTemplates }) {
-    const [editMode, setEditMode] = useState('ui'); // 'ui' or 'json'
+    const [editMode, setEditMode] = useState('ui'); // 'ui' sau 'json'
     const [editableControls, setEditableControls] = useState([...controls]);
     const [jsonContent, setJsonContent] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // UI State
+    // Stare interfata
     const [showAddModal, setShowAddModal] = useState(false);
-    const [editingControlIndex, setEditingControlIndex] = useState(null); // Index of control being edited
+    const [editingControlIndex, setEditingControlIndex] = useState(null); // Indexul controlului editat
 
-    // Initialize JSON content when switching to JSON mode
+    // Initializare continut JSON la comutarea in mod JSON
     useEffect(() => {
         if (editMode === 'json') {
             setJsonContent(JSON.stringify(editableControls, null, 2));
         }
     }, [editMode]);
 
-    // Sync JSON back to UI when valid
+    // Sincronizare JSON inapoi in UI daca este valid
     const syncJsonToUi = () => {
         try {
             const parsed = JSON.parse(jsonContent);
@@ -1258,7 +1190,7 @@ function EditTemplateModal({ template, controls, onClose, onSuccess, predefinedT
         try {
             let controlsToSave = editableControls;
 
-            // If in JSON mode, parse the JSON content
+            // Daca este in mod JSON, parsare continut JSON
             if (editMode === 'json') {
                 try {
                     controlsToSave = JSON.parse(jsonContent);
@@ -1287,7 +1219,7 @@ function EditTemplateModal({ template, controls, onClose, onSuccess, predefinedT
                 <div className="modal-header">
                     <h2>Editeaza Controale - {template.name}</h2>
                     <div style={{ display: 'flex', gap: '1rem' }}>
-                        {/* Mode Switcher */}
+                        {/* Comutator mod */}
                         <div style={{
                             display: 'flex',
                             backgroundColor: '#fff',
@@ -1427,7 +1359,7 @@ function EditTemplateModal({ template, controls, onClose, onSuccess, predefinedT
                 </div>
             </div>
 
-            {/* Nested Modals */}
+            {/* Modale imbricate */}
             <AddControlModal
                 show={showAddModal}
                 onClose={() => setShowAddModal(false)}

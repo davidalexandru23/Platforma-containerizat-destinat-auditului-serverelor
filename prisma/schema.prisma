@@ -1,5 +1,5 @@
-// Prisma Schema pentru Platforma Audit Servere
-// Generator si datasource
+// Schema Prisma pentru Platforma Audit Servere
+// Configurare generator si sursa date
 
 generator client {
   provider      = "prisma-client-js"
@@ -11,7 +11,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==================== AUTH & USERS ====================
+// ==================== AUTENTIFICARE SI UTILIZATORI ====================
 
 model User {
   id            String          @id @default(uuid())
@@ -35,7 +35,7 @@ model Role {
   id          String   @id @default(uuid())
   name        String   @unique // ADMIN, AUDITOR, VIEWER
   description String?
-  permissions String[] // lista capabilities globale
+  permissions String[] // lista capabilitati globale
   users       User[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -58,7 +58,7 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-// ==================== SERVERS & AGENT ====================
+// ==================== SERVER SI AGENT ====================
 
 model Server {
   id                 String              @id @default(uuid())
@@ -99,7 +99,7 @@ model Permission {
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   serverId     String
   server       Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  capabilities String[] // view, runAudit, generateReport, sshAccess
+  capabilities String[] // vizualizare, rulare audit, generare raport, acces ssh
   expiresAt    DateTime? // pentru JIT access
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -108,7 +108,7 @@ model Permission {
   @@map("permissions")
 }
 
-// ==================== TEMPLATES & CONTROLS ====================
+// ==================== SABLOANE SI CONTROALE ====================
 
 model Template {
   id          String            @id @default(uuid())
@@ -144,7 +144,7 @@ model Control {
   id                String           @id @default(uuid())
   templateVersionId String
   templateVersion   TemplateVersion  @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
-  controlId         String // ex: "1.1.1"
+  controlId         String // e.g. "1.1.1"
   title             String
   category          String
   severity          Severity
@@ -163,7 +163,7 @@ model AutomatedCheck {
   checkId        String
   title          String
   description    String?
-  command        String? // comanda de executat pe agent
+  command        String? // comanda de executare pe agent
   script         String? // script mai complex
   expectedResult String?
   checkType      String? // COMMAND, SCRIPT, FILE_CHECK, etc
@@ -206,7 +206,7 @@ model EvidenceSpec {
   @@map("evidence_specs")
 }
 
-// ==================== AUDIT EXECUTION ====================
+// ==================== EXECUTARE AUDIT ====================
 
 model AuditRun {
   id                         String             @id @default(uuid())
@@ -284,18 +284,18 @@ model Evidence {
   @@map("evidence")
 }
 
-// ==================== INVENTORY & METRICS ====================
+// ==================== INVENTAR SI METRICI ====================
 
 model InventorySnapshot {
   id        String   @id @default(uuid())
   serverId  String
   server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  osInfo    Json? // distro, version, kernel
+  osInfo    Json? // distributie, versiune, kernel
   packages  Json? // lista pachete
   services  Json? // lista servicii
   ports     Json? // porturi deschise
   processes Json? // procese active
-  sshConfig Json? // config SSH efectiv
+  sshConfig Json? // configurare SSH efectiva
   sysctl    Json? // valori sysctl
   firewall  Json? // reguli firewall
   users     Json? // useri sistem
@@ -327,7 +327,7 @@ model MetricSample {
   @@map("metric_samples")
 }
 
-// ==================== VULNERABILITY TRACKING ====================
+// ==================== URMARIRE VULNERABILITATI ====================
 
 model VulnerabilityMatch {
   id                  String   @id @default(uuid())
@@ -347,7 +347,7 @@ model VulnerabilityMatch {
   @@map("vulnerability_matches")
 }
 
-// ==================== AUDIT LOG ====================
+// ==================== JURNAL AUDIT ====================
 
 model AuditLog {
   id         String   @id @default(uuid())

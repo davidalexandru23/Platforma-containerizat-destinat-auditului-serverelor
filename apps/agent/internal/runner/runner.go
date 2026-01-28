@@ -14,35 +14,33 @@ import (
 
 func Run(cfg *config.Config, version string) error {
 	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════════╗")
-	fmt.Println("║           BitTrail Agent v" + version + "                  ║")
-	fmt.Println("╚══════════════════════════════════════════════════╝")
+	fmt.Println("=== BitTrail Agent v" + version + " ===")
 	fmt.Println()
 	fmt.Printf("Server ID:  %s\n", cfg.ServerID)
 	fmt.Printf("Backend:    %s\n", cfg.ServerURL)
-	fmt.Printf("Metrics:    every %ds\n", cfg.MetricsInterval)
-	fmt.Printf("Inventory:  every %ds\n", cfg.InventoryInterval)
+	fmt.Printf("Metrici:    fiecare %ds\n", cfg.MetricsInterval)
+	fmt.Printf("Inventar:   fiecare %ds\n", cfg.InventoryInterval)
 	fmt.Println()
-	fmt.Println("Agent pornit. Press Ctrl+C pentru oprire.")
+	fmt.Println("Agent pornit. Apasare Ctrl+C pentru oprire.")
 	fmt.Println()
 
 	client := api.NewClient(cfg.ServerURL, cfg.ServerID, cfg.AgentToken)
 
-	// colectori
+	// Colectori
 	metricsCollector := collector.NewMetricsCollector()
 	inventoryCollector := collector.NewInventoryCollector()
 	auditRunner := collector.NewAuditRunner()
 
-	// canale pt oprire
+	// Canale oprire
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	// tickere
+	// Tickere
 	metricsTicker := time.NewTicker(time.Duration(cfg.MetricsInterval) * time.Second)
 	inventoryTicker := time.NewTicker(time.Duration(cfg.InventoryInterval) * time.Second)
 	auditTicker := time.NewTicker(time.Duration(cfg.AuditCheckInterval) * time.Second)
 
-	// colecteaza imediat la start
+	// Colectare imediata la pornire
 	go sendMetrics(client, metricsCollector)
 	go sendInventory(client, inventoryCollector)
 
@@ -101,9 +99,9 @@ func checkPendingAudits(client *api.Client, ar *collector.AuditRunner) {
 		return
 	}
 
-	fmt.Printf("[INFO] Procesez %d checks audit...\n", len(checks))
+	fmt.Printf("[INFO] Procesare %d controale audit...\n", len(checks))
 
-	// grupeaza per auditRunId
+	// Grupare per AuditRunID
 	byRun := make(map[string][]api.PendingCheck)
 	for _, check := range checks {
 		byRun[check.AuditRunID] = append(byRun[check.AuditRunID], check)
@@ -119,7 +117,7 @@ func checkPendingAudits(client *api.Client, ar *collector.AuditRunner) {
 	}
 }
 
-// TestCollectors - pt debugging
+// TestCollectors - pentru depanare
 func TestCollectors() error {
 	fmt.Println("=== Test Colectori BitTrail Agent ===")
 	fmt.Println()
@@ -158,10 +156,10 @@ func TestCollectors() error {
 				fmt.Printf("OS: %s %s\n", platform, version)
 			}
 		}
-		fmt.Printf("Open ports: %d\n", len(inv.Ports))
-		fmt.Printf("Users: %d\n", len(inv.Users))
-		fmt.Printf("Packages: %d\n", len(inv.Packages))
-		fmt.Printf("Services: %d\n", len(inv.Services))
+		fmt.Printf("Porturi deschise: %d\n", len(inv.Ports))
+		fmt.Printf("Utilizatori: %d\n", len(inv.Users))
+		fmt.Printf("Pachete: %d\n", len(inv.Packages))
+		fmt.Printf("Servicii: %d\n", len(inv.Services))
 	}
 
 	fmt.Println()

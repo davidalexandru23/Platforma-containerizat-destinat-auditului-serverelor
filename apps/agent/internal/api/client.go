@@ -21,7 +21,7 @@ func NewClient(baseURL, serverID, agentToken string) *Client {
 		serverID:   serverID,
 		agentToken: agentToken,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 	}
 }
@@ -35,14 +35,19 @@ func (c *Client) SendInventory(inventory interface{}) error {
 }
 
 type PendingCheck struct {
-	AuditRunID       string `json:"auditRunId"`
-	AutomatedCheckID string `json:"automatedCheckId"`
-	CheckID          string `json:"checkId"`
-	Title            string `json:"title"`
-	Command          string `json:"command"`
-	Script           string `json:"script"`
-	ExpectedResult   string `json:"expectedResult"`
-	CheckType        string `json:"checkType"`
+	AuditRunID       string   `json:"auditRunId"`
+	AutomatedCheckID string   `json:"automatedCheckId"`
+	CheckID          string   `json:"checkId"`
+	Title            string   `json:"title"`
+	Command          string   `json:"command"`
+	Script           string   `json:"script"`
+	ExpectedResult   string   `json:"expectedResult"`
+	CheckType        string   `json:"checkType"`
+	Comparison       string   `json:"comparison"`    // EQUALS, CONTAINS, REGEX, NUM_EQ, NUM_GE, NUM_LE
+	Parser           string   `json:"parser"`        // RAW, JSON, FIRST_LINE
+	Normalize        []string `json:"normalize"`     // TRIM, LOWER, SQUASH_WS
+	OnFailMessage    string   `json:"onFailMessage"` // Custom message on failure
+	PlatformScope    []string `json:"platformScope"` // ubuntu, debian, rhel
 }
 
 func (c *Client) GetPendingChecks() ([]PendingCheck, error) {

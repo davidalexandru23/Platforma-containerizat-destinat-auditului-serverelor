@@ -1,9 +1,9 @@
-const rateLimit = require('express-rate-limit');
+import rateLimit from 'express-rate-limit';
 
-// Rate limiter pentru auth
+// Limitare rata pentru autentificare
 const authLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minut
-    max: 10, // 10 requests pe minut
+    max: 10, // 10 cereri pe minut
     message: {
         error: 'Too Many Requests',
         message: 'Prea multe incercari, incearca din nou mai tarziu',
@@ -12,31 +12,31 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-// Rate limiter pentru agent
+// Limitare rata pentru agent
 const agentLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 60, // 1/sec pentru metrics
+    max: 60, // 1/sec pentru metrici
     message: {
         error: 'Too Many Requests',
         message: 'Rate limit depasit',
     },
     keyGenerator: (req) => {
-        // Key bazat pe agent token
+        // Cheie bazata pe token agent
         return req.headers['x-agent-token'] || req.ip;
     },
 });
 
-// Rate limiter general
+// Limitare rata generala
 const generalLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 100,
     message: {
         error: 'Too Many Requests',
-        message: 'Prea multe requests',
+        message: 'Prea multe cereri',
     },
 });
 
-module.exports = {
+export {
     authLimiter,
     agentLimiter,
     generalLimiter,

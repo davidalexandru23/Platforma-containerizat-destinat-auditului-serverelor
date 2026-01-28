@@ -1,0 +1,703 @@
+{
+    "$schema": "bittrail-template@1.0",
+    "metadata": {
+        "name": "NIST SP 800-53 Rev.5 (Moderate) - Linux Server Automated Audit Pack",
+        "description": "Template de audit aliniat la NIST SP 800-53 Rev.5 (nivel Moderate), adaptat pentru servere Linux. Include controale tehnice si operationale, cu verificari automatizabile prin agent acolo unde este posibil (read-only).",
+        "version": "1.0.0",
+        "type": "CUSTOM",
+        "author": "BitTrail Platform",
+        "createdAt": "2026-01-27T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "AC-2",
+            "title": "Account Management: inventar conturi si ciclul de viata",
+            "category": "Access Control",
+            "description": "Conturile sunt inventariate, revizuite periodic, iar conturile nefolosite sunt dezactivate/sterse conform politicii. (Family: AC)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "AC-2.a",
+                    "title": "passwd_inventory",
+                    "command": "cut -d: -f1,3,6,7 /etc/passwd | sed -n '1,220p'",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AC-2.b",
+                    "title": "locked_accounts",
+                    "command": "awk -F: '($2 ~ /^!|^\\*/){print $1\":\"$2}' /etc/shadow 2>/dev/null | sed -n '1,220p' || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AC-2.c",
+                    "title": "lastlog_summary",
+                    "command": "lastlog 2>/dev/null | sed -n '1,220p' || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "AC-2.M1",
+                    "title": "Verificare politica si review conturi",
+                    "instructions": "Incarcati Politica de lifecycle (creare, modificare, dezactivare) si Dovada review-ului periodic (ex: lunar/trimestrial).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "AC-3",
+            "title": "Access Enforcement: permisii corecte pe fisiere si foldere critice",
+            "category": "Access Control",
+            "description": "Permisiunile pe fisiere critice sunt restrictive si aliniate la least privilege. (Family: AC)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "AC-3.a",
+                    "title": "critical_perms",
+                    "command": "for f in /etc/shadow /etc/gshadow /etc/sudoers /etc/ssh/sshd_config; do [ -f \"$f\" ] && stat -c '%n %U:%G %a' \"$f\"; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AC-3.b",
+                    "title": "world_writable_files",
+                    "command": "find / -xdev -type f -perm -0002 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "AC-6",
+            "title": "Least Privilege: sudo minim si fara NOPASSWD nejustificat",
+            "category": "Access Control",
+            "description": "Doar conturile necesare au privilegii elevate, iar sudo este configurat minim, auditabil. (Family: AC)",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "AC-6.a",
+                    "title": "sudoers_and_dropins",
+                    "command": "cat /etc/sudoers 2>/dev/null || true; ls -la /etc/sudoers.d 2>/dev/null || true; for f in /etc/sudoers.d/*; do [ -f \"$f\" ] && { echo \"--- $f\"; cat \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AC-6.b",
+                    "title": "nopasswd_search",
+                    "command": "grep -R \"NOPASSWD\" -n /etc/sudoers /etc/sudoers.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "AC-6.M1",
+                    "title": "Verificare exceptii sudo",
+                    "instructions": "Incarcati justificari aprobate pentru exceptii (daca exista).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "AC-7",
+            "title": "Unsuccessful Logon Attempts: blocare dupa incercari esuate",
+            "category": "Access Control",
+            "description": "Exista controale pentru limitarea incercarilor de autentificare esuate (faillock, pam_tally2, fail2ban). (Family: AC)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "AC-7.a",
+                    "title": "faillock_conf",
+                    "command": "cat /etc/security/faillock.conf 2>/dev/null || true; grep -R \"pam_faillock\" -n /etc/pam.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AC-7.b",
+                    "title": "fail2ban_status",
+                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status; fail2ban-client status sshd 2>/dev/null || true; else echo \"SKIP_FAIL2BAN\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "AC-17",
+            "title": "Remote Access: SSH hardening",
+            "category": "Access Control",
+            "description": "Accesul remote este configurat sigur (fara root login, parole dezactivate unde e posibil, setari moderne). (Family: AC)",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "AC-17.a",
+                    "title": "sshd_effective",
+                    "command": "sshd -T 2>/dev/null | sed -n '1,220p' || (cat /etc/ssh/sshd_config 2>/dev/null || true)",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AC-17.b",
+                    "title": "ssh_keys_inventory",
+                    "command": "for d in /home/* /root; do [ -d \"$d/.ssh\" ] && { echo \"== $d ==\"; ls -la \"$d/.ssh\"; [ -f \"$d/.ssh/authorized_keys\" ] && sed -n '1,200p' \"$d/.ssh/authorized_keys\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "IA-2",
+            "title": "Identification and Authentication: metoda autentificare si MFA unde e aplicabil",
+            "category": "Identity & Authentication",
+            "description": "Sunt folosite mecanisme de autentificare adecvate (chei SSH, PAM), iar MFA este implementat unde e posibil pentru acces privilegiat. (Family: IA)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "IA-2.a",
+                    "title": "pam_stack",
+                    "command": "ls -la /etc/pam.d 2>/dev/null || true; sed -n '1,200p' /etc/pam.d/sshd 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "IA-2.b",
+                    "title": "mfa_modules_presence",
+                    "command": "ls -la /lib*/security 2>/dev/null | grep -E 'google_authenticator|oath|yubico|pam_u2f' || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "IA-2.M1",
+                    "title": "Verificare MFA",
+                    "instructions": "Incarcati Politica MFA (unde e obligatoriu) si Dovada configurarii MFA pentru conturi admin.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "IA-5",
+            "title": "Authenticator Management: politici parole si expirare",
+            "category": "Identity & Authentication",
+            "description": "Politicile de parola sunt configurate (complexitate, istoric, expirare) si sunt aplicate consistent. (Family: IA)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "IA-5.a",
+                    "title": "login_defs",
+                    "command": "cat /etc/login.defs 2>/dev/null | sed -n '1,220p' || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "IA-5.b",
+                    "title": "pwquality",
+                    "command": "cat /etc/security/pwquality.conf 2>/dev/null || true; grep -R \"pam_pwquality\\|pam_cracklib\" -n /etc/pam.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "AU-2",
+            "title": "Audit Events: evenimente auditate si acoperire loguri",
+            "category": "Logging & Monitoring",
+            "description": "Sunt definite evenimentele care trebuie logate (auth, privilegii, schimbari configuratie, network). (Family: AU)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "AU-2.a",
+                    "title": "journald_disk",
+                    "command": "journalctl --disk-usage 2>/dev/null || true; cat /etc/systemd/journald.conf 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AU-2.b",
+                    "title": "rsyslog_conf",
+                    "command": "systemctl status rsyslog --no-pager 2>/dev/null || true; ls -la /etc/rsyslog.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "AU-2.M1",
+                    "title": "Verificare matrice audit",
+                    "instructions": "Incarcati Matricea evenimente audit (ce, de ce, retentie, cine are acces).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "AU-6",
+            "title": "Audit Review: alertare si review periodic",
+            "category": "Logging & Monitoring",
+            "description": "Logurile sunt revizuite si exista mecanisme de alertare pentru evenimente critice. (Family: AU)",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "AU-6.a",
+                    "title": "auth_failures",
+                    "command": "journalctl -u ssh --no-pager -n 200 2>/dev/null || true; journalctl --no-pager -n 200 | grep -iE 'failed password|authentication failure' | head -n 200 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "AU-6.b",
+                    "title": "logrotate",
+                    "command": "cat /etc/logrotate.conf 2>/dev/null || true; ls -la /etc/logrotate.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "AU-6.M1",
+                    "title": "Verificare alertare",
+                    "instructions": "Incarcati Reguli de alertare (SIEM, email, webhook) si dovezi ca functioneaza.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "AU-9",
+            "title": "Protection of Audit Information: acces restrictiv la loguri",
+            "category": "Logging & Monitoring",
+            "description": "Logurile sunt protejate contra modificarii/stergerii neautorizate, iar accesul este restrans. (Family: AU)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "AU-9.a",
+                    "title": "log_dir_perms",
+                    "command": "stat -c '%n %U:%G %a' /var/log 2>/dev/null || true; find /var/log -maxdepth 1 -type f -printf '%p %u:%g %m\\n' 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "CM-2",
+            "title": "Baseline Configuration: configuratie de referinta si drift",
+            "category": "Secure Configuration",
+            "description": "Exista o configuratie de referinta si se detecteaza abateri (drift) intre audituri. (Family: CM)",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "CM-2.a",
+                    "title": "baseline_hashes",
+                    "command": "for f in /etc/ssh/sshd_config /etc/sudoers /etc/sysctl.conf /etc/login.defs /etc/security/pwquality.conf; do [ -f \"$f\" ] && { echo \"== $f ==\"; sha256sum \"$f\"; }; done 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "CM-6",
+            "title": "Configuration Settings: sysctl hardening si setari de retea",
+            "category": "Secure Configuration",
+            "description": "Setarile sysctl relevante sunt aplicate si documentate. (Family: CM)",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "CM-6.a",
+                    "title": "sysctl_dump",
+                    "command": "sysctl -a 2>/dev/null | sed -n '1,240p' || true; ls -la /etc/sysctl.d 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "CM-7",
+            "title": "Least Functionality: servicii active si reducere suprafata atac",
+            "category": "Secure Configuration",
+            "description": "Sunt active doar serviciile necesare, iar cele inutile sunt dezactivate. (Family: CM)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "CM-7.a",
+                    "title": "running_services",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-units --type=service --state=running; else service --status-all 2>/dev/null || true; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "CM-7.b",
+                    "title": "enabled_services",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-unit-files --type=service --state=enabled; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "CM-8",
+            "title": "System Component Inventory: OS, kernel, pachete, runtime",
+            "category": "Asset Management",
+            "description": "Componentele sistemului sunt inventariate: OS, kernel, pachete, runtime container. (Family: CM)",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "CM-8.a",
+                    "title": "os_release",
+                    "command": "cat /etc/os-release 2>/dev/null || true; uname -a",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "CM-8.b",
+                    "title": "packages",
+                    "command": "if command -v dpkg >/dev/null 2>&1; then dpkg -l; elif command -v rpm >/dev/null 2>&1; then rpm -qa; else echo \"NO_PKG_MGR\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "CM-8.c",
+                    "title": "container_inventory",
+                    "command": "if command -v docker >/dev/null 2>&1; then docker ps --format 'table {{.Names}}\\t{{.Image}}\\t{{.Ports}}'; docker images --digests; else echo \"SKIP_DOCKER\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "SC-7",
+            "title": "Boundary Protection: firewall host si porturi ascultate",
+            "category": "Network Security",
+            "description": "Exista filtrare la nivel host, iar porturile ascultate sunt controlate. (Family: SC)",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-7.a",
+                    "title": "listening_ports",
+                    "command": "ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "SC-7.b",
+                    "title": "firewall_rules",
+                    "command": "if command -v ufw >/dev/null 2>&1; then ufw status verbose; fi; if command -v nft >/dev/null 2>&1; then nft list ruleset; fi; if command -v iptables >/dev/null 2>&1; then iptables -S; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "SC-8",
+            "title": "Transmission Confidentiality and Integrity: TLS si certificate",
+            "category": "Cryptography",
+            "description": "Serviciile expuse folosesc criptare in tranzit (TLS) si certificate gestionate. (Family: SC)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-8.a",
+                    "title": "cert_paths",
+                    "command": "ls -la /etc/ssl 2>/dev/null || true; ls -la /etc/letsencrypt 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "SC-8.b",
+                    "title": "nginx_config_extract",
+                    "command": "if command -v nginx >/dev/null 2>&1; then nginx -T 2>/dev/null | sed -n '1,240p'; else echo \"SKIP_NGINX\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-8.M1",
+                    "title": "Verificare TLS extern",
+                    "instructions": "Incarcati Rezultat scan extern TLS (daca se aplica) si plan remediere.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SI-2",
+            "title": "Flaw Remediation: patching si update-uri de securitate",
+            "category": "Vulnerability & Patch Management",
+            "description": "Update-urile de securitate sunt aplicate la timp, iar restantele sunt urmarite. (Family: SI)",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "SI-2.a",
+                    "title": "pending_updates_deb",
+                    "command": "if command -v apt >/dev/null 2>&1; then apt-get -s upgrade 2>/dev/null | sed -n '1,240p'; else echo \"SKIP_APT\"; fi",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "SI-2.b",
+                    "title": "pending_updates_rpm",
+                    "command": "if command -v dnf >/dev/null 2>&1; then dnf -q check-update || true; elif command -v yum >/dev/null 2>&1; then yum -q check-update || true; else echo \"SKIP_YUM_DNF\"; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SI-2.M1",
+                    "title": "Verificare politica patching",
+                    "instructions": "Incarcati Politica de patching (SLA pe severitati) si Dovada ferestrelor de mentenanta.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SI-3",
+            "title": "Malicious Code Protection: detectie malware sau controale echivalente",
+            "category": "Threat Management",
+            "description": "Exista mecanisme de detectie malware sau masuri echivalente (EDR, ClamAV, integritate). (Family: SI)",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "SI-3.a",
+                    "title": "clamav_check",
+                    "command": "systemctl status clamav-freshclam --no-pager 2>/dev/null || true; clamscan --version 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "SI-3.b",
+                    "title": "edr_agent_presence",
+                    "command": "ps aux 2>/dev/null | grep -iE 'falcon|crowdstrike|sentinel|defender|elastic-agent|osquery' | grep -v grep | head -n 50 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "SI-4",
+            "title": "System Monitoring: procese, conexiuni, semne de compromitere",
+            "category": "Threat Management",
+            "description": "Sunt colectate date de monitorizare pentru detectie (procese, conexiuni, persistenta). (Family: SI)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "SI-4.a",
+                    "title": "process_snapshot",
+                    "command": "ps aux --sort=-%cpu | head -n 40; echo \"== MEM ==\"; ps aux --sort=-%mem | head -n 40",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "SI-4.b",
+                    "title": "net_snapshot",
+                    "command": "ss -antup 2>/dev/null | head -n 240 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "SI-4.c",
+                    "title": "persistence_points",
+                    "command": "ls -la /etc/cron.* 2>/dev/null || true; crontab -l 2>/dev/null || true; ls -la /etc/systemd/system 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "IR-4",
+            "title": "Incident Handling: colectare rapida dovezi (triage)",
+            "category": "Incident Management",
+            "description": "Exista capacitate de a colecta dovezi rapide pentru investigatie si raportare. (Family: IR)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "IR-4.a",
+                    "title": "triage_bundle",
+                    "command": "echo \"== TIME ==\"; date; echo \"== UPTIME ==\"; uptime; echo \"== USERS ==\"; who; echo \"== DISK ==\"; df -h; echo \"== KERNEL ==\"; uname -a; echo \"== AUTH LAST ==\"; last -n 30 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "IR-4.M1",
+                    "title": "Verificare procedura IR",
+                    "instructions": "Incarcati Procedura IR (roluri, pasi, comunicare, escaladare).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "CP-9",
+            "title": "System Backup: job-uri, unelte si verificari",
+            "category": "Backup & Recovery",
+            "description": "Exista backup-uri regulate, separate de sistem, cu retentie si verificari. (Family: CP)",
+            "severity": "CRITICAL",
+            "automatedChecks": [
+                {
+                    "checkId": "CP-9.a",
+                    "title": "backup_jobs",
+                    "command": "ls -la /etc/cron.* 2>/dev/null || true; grep -R \"backup\\|restic\\|borg\\|rclone\\|rsync\" -n /etc/cron.* /etc/crontab 2>/dev/null | head -n 200 || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "CP-9.b",
+                    "title": "backup_tools",
+                    "command": "command -v restic 2>/dev/null && restic version || true; command -v borg 2>/dev/null && borg --version || true; command -v rclone 2>/dev/null && rclone version | head -n 5 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "CP-9.M1",
+                    "title": "Verificare restore si politica",
+                    "instructions": "Incarcati Dovada test restore (data, ce s-a restaurat, rezultat) si Politica RPO/RTO.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "RA-5",
+            "title": "Vulnerability Monitoring and Scanning: semnale pentru vulnerabilitati",
+            "category": "Vulnerability & Patch Management",
+            "description": "Exista capabilitate de identificare vulnerabilitati (scanner extern, matching pe SBOM/pachete). (Family: RA)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "RA-5.a",
+                    "title": "sbom_inputs_os_pkg",
+                    "command": "cat /etc/os-release 2>/dev/null || true; uname -r; if command -v dpkg-query >/dev/null 2>&1; then dpkg-query -W -f='${Package} ${Version}\\n' | head -n 400; elif command -v rpm >/dev/null 2>&1; then rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\\n' | head -n 400; fi",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "MA-4",
+            "title": "Remote Maintenance: limitare si logare acces administrativ",
+            "category": "Operations",
+            "description": "Mentenanta remote este limitata, monitorizata si logata (SSH, bastion, jump host). (Family: MA)",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "MA-4.a",
+                    "title": "ssh_login_config",
+                    "command": "grep -E '^(PermitRootLogin|PasswordAuthentication|AllowUsers|AllowGroups|PubkeyAuthentication|LogLevel|MaxAuthTries|ClientAliveInterval|ClientAliveCountMax)' -n /etc/ssh/sshd_config 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "MA-4.b",
+                    "title": "sudo_usage_recent",
+                    "command": "journalctl --no-pager -n 300 | grep -iE 'sudo' | head -n 200 || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "MA-4.M1",
+                    "title": "Verificare bastion",
+                    "instructions": "Incarcati Dovada existenta bastion/jump (daca e arhitectura respectiva).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "PL-2",
+            "title": "System Security Plan: documentare minima ceruta",
+            "category": "Governance",
+            "description": "Exista documentatie minima privind obiectivele de securitate, configuratia si responsabilitatile. (Family: PL)",
+            "severity": "LOW",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "PL-2.M1",
+                    "title": "Verificare SSP",
+                    "instructions": "Incarcati System Security Plan (SSP) sau echivalent si Scope si limite, responsabilitati, dependinte.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "PE-18",
+            "title": "Physical Access: dovada locatie si control acces fizic",
+            "category": "Physical & Environmental",
+            "description": "Accesul fizic la server este controlat (colo, rack, camera tehnica). (Family: PE)",
+            "severity": "MEDIUM",
+            "automatedChecks": [],
+            "manualChecks": [
+                {
+                    "checkId": "PE-18.M1",
+                    "title": "Verificare acces fizic",
+                    "instructions": "Incarcati Politica acces fizic, jurnal acces, contract colo (daca e cazul).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SC-13",
+            "title": "Cryptographic Protection: configuratii crypto si modul FIPS unde e necesar",
+            "category": "Cryptography",
+            "description": "Criptografia folosita este aliniata politicii (algoritmi moderni), iar modul FIPS este activ unde este cerut. (Family: SC)",
+            "severity": "MEDIUM",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-13.a",
+                    "title": "fips_mode_check",
+                    "command": "cat /proc/sys/crypto/fips_enabled 2>/dev/null || echo \"NO_FIPS_FLAG\"; (command -v update-crypto-policies >/dev/null 2>&1 && update-crypto-policies --show) || true; (command -v openssl >/dev/null 2>&1 && openssl version -a) || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-13.M1",
+                    "title": "Verificare politica crypto",
+                    "instructions": "Incarcati Politica criptografica (ce este permis, ce este interzis).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "SC-28",
+            "title": "Protection of Information at Rest: criptare disc sau date sensibile",
+            "category": "Cryptography",
+            "description": "Datele sensibile la rest sunt protejate (LUKS, encrypt volumes, KMS), unde este necesar. (Family: SC)",
+            "severity": "HIGH",
+            "automatedChecks": [
+                {
+                    "checkId": "SC-28.a",
+                    "title": "block_devices",
+                    "command": "lsblk -f 2>/dev/null || true; blkid 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                },
+                {
+                    "checkId": "SC-28.b",
+                    "title": "luks_status",
+                    "command": "command -v cryptsetup >/dev/null 2>&1 && cryptsetup status 2>/dev/null || true",
+                    "checkType": "COMMAND"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "SC-28.M1",
+                    "title": "Verificare criptare date",
+                    "instructions": "Incarcati Politica de clasificare date si cerinte de criptare.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true
+                    }
+                }
+            ]
+        }
+    ]
+}

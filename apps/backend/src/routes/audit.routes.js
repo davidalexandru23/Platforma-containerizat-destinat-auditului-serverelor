@@ -1,11 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const auditService = require('../services/audit.service');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
-const { auditLog } = require('../middleware/audit.middleware');
+import express from 'express';
+import multer from 'multer';
+import * as auditService from '../services/audit.service.js';
+import { authenticate, authorize } from '../middleware/auth.middleware.js';
+import { auditLog } from '../middleware/audit.middleware.js';
 
-// config multer pt upload evidence
+const router = express.Router();
+
+// Configurare multer pentru incarcare dovezi
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
@@ -16,7 +17,7 @@ const upload = multer({
  * /audit:
  *   get:
  *     tags: [Audit]
- *     summary: Lista audit runs
+ *     summary: Lista rulari audit
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/',
@@ -36,7 +37,7 @@ router.get('/',
  * /audit/{id}:
  *   get:
  *     tags: [Audit]
- *     summary: Detalii audit run
+ *     summary: Detalii rulare audit
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id',
@@ -56,7 +57,7 @@ router.get('/:id',
  * /audit/{id}/progress:
  *   get:
  *     tags: [Audit]
- *     summary: Progres audit run
+ *     summary: Progres rulare audit
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/:id/progress',
@@ -76,7 +77,7 @@ router.get('/:id/progress',
  * /audit/run:
  *   post:
  *     tags: [Audit]
- *     summary: Porneste un audit
+ *     summary: Pornire audit
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/run',
@@ -98,7 +99,7 @@ router.post('/run',
  * /audit/{id}/complete:
  *   post:
  *     tags: [Audit]
- *     summary: Finalizeaza audit (calculeaza scoring final)
+ *     summary: Finalizare audit (calculare scor final)
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/:id/complete',
@@ -119,7 +120,7 @@ router.post('/:id/complete',
  * /audit/{runId}/manual/{taskId}/evidence:
  *   post:
  *     tags: [Audit]
- *     summary: Submit evidence pentru task manual
+ *     summary: Transmitere dovezi pentru sarcina manuala
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/:runId/manual/:taskId/evidence',
@@ -145,7 +146,7 @@ router.post('/:runId/manual/:taskId/evidence',
  * /audit/{runId}/manual/{taskId}/approve:
  *   post:
  *     tags: [Audit]
- *     summary: Aproba/respinge task manual
+ *     summary: Aprobare/Respingere sarcina manuala
  *     security: [{ bearerAuth: [] }]
  */
 router.post('/:runId/manual/:taskId/approve',
@@ -167,4 +168,28 @@ router.post('/:runId/manual/:taskId/approve',
     }
 );
 
-module.exports = router;
+/**
+ * @swagger
+ * /audit/{runId}/manual/{taskId}/reset:
+ *   post:
+ *     tags: [Audit]
+ *     summary: Resetare sarcina manuala la IN ASTEPTARE
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post('/:runId/manual/:taskId/reset',
+    authenticate,
+    authorize('ADMIN', 'AUDITOR'),
+    async (req, res, next) => {
+        try {
+            const result = await auditService.resetTask(
+                req.params.runId,
+                req.params.taskId
+            );
+            res.json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+export default router;
