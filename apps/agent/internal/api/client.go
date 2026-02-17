@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,13 +16,17 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClient(baseURL, serverID, agentToken string) *Client {
+func NewClient(baseURL, serverID, agentToken string, tlsConfig *tls.Config) *Client {
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
 	return &Client{
 		baseURL:    baseURL,
 		serverID:   serverID,
 		agentToken: agentToken,
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
+			Transport: transport,
+			Timeout:   120 * time.Second,
 		},
 	}
 }
@@ -43,11 +48,12 @@ type PendingCheck struct {
 	Script           string   `json:"script"`
 	ExpectedResult   string   `json:"expectedResult"`
 	CheckType        string   `json:"checkType"`
-	Comparison       string   `json:"comparison"`    // EQUALS, CONTAINS, REGEX, NUM_EQ, NUM_GE, NUM_LE
-	Parser           string   `json:"parser"`        // RAW, JSON, FIRST_LINE
-	Normalize        []string `json:"normalize"`     // TRIM, LOWER, SQUASH_WS
-	OnFailMessage    string   `json:"onFailMessage"` // Custom message on failure
-	PlatformScope    []string `json:"platformScope"` // ubuntu, debian, rhel
+	Comparison       string   `json:"comparison"`
+	Parser           string   `json:"parser"`
+	Normalize        []string `json:"normalize"`
+	OnFailMessage    string   `json:"onFailMessage"`
+	PlatformScope    []string `json:"platformScope"`
+	Signature        string   `json:"signature"` // Semnatura verificare comanda
 }
 
 func (c *Client) GetPendingChecks() ([]PendingCheck, error) {
@@ -77,9 +83,17 @@ func (c *Client) GetPendingChecks() ([]PendingCheck, error) {
 
 type CheckResult struct {
 	AutomatedCheckID string `json:"automatedCheckId"`
-	Status           string `json:"status"` // PASS, FAIL, ERROR, SKIPPED
+	Status           string `json:"status"`
 	Output           string `json:"output"`
 	ErrorMessage     string `json:"errorMessage,omitempty"`
+
+	// Campuri Lant Custodie
+	OutputHash    string `json:"outputHash"`
+	ExecTimestamp string `json:"execTimestamp"`
+	ExecHostname  string `json:"execHostname"`
+	ExecUser      string `json:"execUser"`
+	ExitCode      int    `json:"exitCode"`
+	Signature     string `json:"signature"` // Semnatura agent pe rezultat
 }
 
 func (c *Client) SendCheckResults(auditRunID string, results []CheckResult) error {

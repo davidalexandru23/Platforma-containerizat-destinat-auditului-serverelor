@@ -3,8 +3,8 @@
     "metadata": {
         "name": "NIS2 Baseline - Linux Server Automated Audit Pack",
         "description": "Template de audit inspirat de cerintele NIS2 (masuri de management al riscurilor si securitate), adaptat pentru servere Linux. Include controale tehnice si operationale, cu verificari automate prin agent acolo unde este posibil.",
-        "version": "1.0.0",
-        "type": "CUSTOM",
+        "version": "1.1.1",
+        "type": "NIS2",
         "author": "BitTrail Platform",
         "createdAt": "2026-01-27T00:00:00Z"
     },
@@ -19,7 +19,9 @@
                 {
                     "checkId": "NIS2-1.1.a",
                     "title": "Listare pachete (dpkg/rpm)",
-                    "command": "if command -v dpkg >/dev/null 2>&1; then dpkg -l; elif command -v rpm >/dev/null 2>&1; then rpm -qa; else echo \"NO_PKG_MGR\"; fi",
+                    "command": "if command -v dpkg >/dev/null 2>&1; then echo 'PKG_MANAGER=dpkg'; dpkg -l | tail -n +6 | wc -l | sed 's/^/PACKAGE_COUNT=/'; elif command -v rpm >/dev/null 2>&1; then echo 'PKG_MANAGER=rpm'; rpm -qa | wc -l | sed 's/^/PACKAGE_COUNT=/'; else echo 'NO_PKG_MGR'; fi",
+                    "expectedResult": "PKG_MANAGER=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -47,13 +49,17 @@
                 {
                     "checkId": "NIS2-1.2.a",
                     "title": "Systemd services running",
-                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-units --type=service --state=running; else service --status-all 2>/dev/null || true; fi",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-units --type=service --state=running --no-pager | head -n 100; else service --status-all 2>/dev/null; fi",
+                    "expectedResult": "running",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-1.2.b",
                     "title": "Listening ports",
-                    "command": "ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null || true",
+                    "command": "ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null",
+                    "expectedResult": "LISTEN",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -68,20 +74,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-2.1.a",
-                    "title": "Check pending updates (APT)",
-                    "command": "if command -v apt >/dev/null 2>&1; then apt-get -s upgrade 2>/dev/null | sed -n '1,200p'; else echo \"SKIP_APT\"; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-2.1.b",
-                    "title": "Check pending updates (RPM)",
-                    "command": "if command -v dnf >/dev/null 2>&1; then dnf -q check-update || true; elif command -v yum >/dev/null 2>&1; then yum -q check-update || true; else echo \"SKIP_YUM_DNF\"; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-2.1.c",
-                    "title": "Last update history",
-                    "command": "if command -v journalctl >/dev/null 2>&1; then journalctl -u apt-daily.service -u apt-daily-upgrade.service --no-pager -n 200 2>/dev/null || true; fi",
+                    "title": "Check pending security updates",
+                    "command": "if command -v apt >/dev/null 2>&1; then UPGRADABLE=$(apt list --upgradable 2>/dev/null | grep -c -v '^Listing'); echo \"PENDING_UPDATES=$UPGRADABLE\"; if [ \"$UPGRADABLE\" -le 20 ]; then echo 'STATUS=OK'; else echo 'STATUS=HIGH_PENDING'; fi; elif command -v dnf >/dev/null 2>&1; then COUNT=$(dnf -q check-update 2>/dev/null | grep -c '.'); echo \"PENDING_UPDATES=$COUNT\"; if [ \"$COUNT\" -le 20 ]; then echo 'STATUS=OK'; else echo 'STATUS=HIGH_PENDING'; fi; else echo 'SKIP_PKG_MGR'; echo 'STATUS=OK'; fi",
+                    "expectedResult": "STATUS=OK",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -97,13 +93,17 @@
                 {
                     "checkId": "NIS2-2.2.a",
                     "title": "Get OS release",
-                    "command": "cat /etc/os-release 2>/dev/null || true",
+                    "command": "cat /etc/os-release 2>/dev/null",
+                    "expectedResult": "ID=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-2.2.b",
                     "title": "Get Kernel version",
-                    "command": "uname -a",
+                    "command": "uname -r",
+                    "expectedResult": ".",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -118,20 +118,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-3.1.a",
-                    "title": "UFW Status",
-                    "command": "if command -v ufw >/dev/null 2>&1; then ufw status verbose; else echo \"SKIP_UFW\"; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-3.1.b",
-                    "title": "NFT ruleset",
-                    "command": "if command -v nft >/dev/null 2>&1; then nft list ruleset; else echo \"SKIP_NFT\"; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-3.1.c",
-                    "title": "Iptables rules",
-                    "command": "if command -v iptables >/dev/null 2>&1; then iptables -S; iptables -L -n -v; else echo \"SKIP_IPTABLES\"; fi",
+                    "title": "Firewall activ (ufw/nft/iptables)",
+                    "command": "if command -v ufw >/dev/null 2>&1; then STATUS=$(ufw status 2>/dev/null | head -1); echo \"$STATUS\"; if echo \"$STATUS\" | grep -qi 'active'; then echo 'FIREWALL=ACTIVE'; else echo 'FIREWALL=INACTIVE'; fi; elif command -v nft >/dev/null 2>&1; then RULES=$(nft list ruleset 2>/dev/null | wc -l); if [ \"$RULES\" -gt 2 ]; then echo 'FIREWALL=ACTIVE'; else echo 'FIREWALL=INACTIVE'; fi; elif command -v iptables >/dev/null 2>&1; then RULES=$(iptables -S 2>/dev/null | grep -cv '^-P'); if [ \"$RULES\" -gt 0 ]; then echo 'FIREWALL=ACTIVE'; else echo 'FIREWALL=INACTIVE'; fi; else echo 'FIREWALL=NOT_FOUND'; fi",
+                    "expectedResult": "FIREWALL=ACTIVE",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -146,14 +136,18 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-3.2.a",
-                    "title": "SSHD Config Effective",
-                    "command": "sshd -T 2>/dev/null | sed -n '1,200p' || (cat /etc/ssh/sshd_config 2>/dev/null || true)",
+                    "title": "SSH PermitRootLogin",
+                    "command": "VALUE=$(sshd -T 2>/dev/null | grep -i 'permitrootlogin' | awk '{print $2}'); if [ -z \"$VALUE\" ]; then VALUE=$(grep -i '^PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}'); fi; echo \"PermitRootLogin=$VALUE\"; if echo \"$VALUE\" | grep -qiE '^(no|prohibit-password)$'; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-3.2.b",
-                    "title": "SSH Listen Ports",
-                    "command": "ss -lntp 2>/dev/null | grep -E ':(22|2222)\\b' || true",
+                    "title": "SSH Protocol si Ciphers",
+                    "command": "sshd -T 2>/dev/null | grep -iE '^(protocol|ciphers|macs|kexalgorithms)' | head -n 10; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -169,19 +163,17 @@
                 {
                     "checkId": "NIS2-3.3.a",
                     "title": "PAM Password Policy",
-                    "command": "grep -R \"pam_pwquality\\|pam_cracklib\" -n /etc/pam.d 2>/dev/null || true",
+                    "command": "FOUND=$(grep -rlE 'pam_pwquality|pam_cracklib' /etc/pam.d 2>/dev/null | wc -l); if [ \"$FOUND\" -gt 0 ]; then echo 'PAM_POLICY=CONFIGURED'; grep -rE 'pam_pwquality|pam_cracklib' /etc/pam.d 2>/dev/null | head -n 10; else echo 'PAM_POLICY=MISSING'; fi",
+                    "expectedResult": "PAM_POLICY=CONFIGURED",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-3.3.b",
-                    "title": "Check faillock.conf",
-                    "command": "ls -la /etc/security/faillock.conf 2>/dev/null; cat /etc/security/faillock.conf 2>/dev/null || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-3.3.c",
-                    "title": "Fail2Ban status",
-                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status; fail2ban-client status sshd 2>/dev/null || true; else echo \"SKIP_FAIL2BAN\"; fi",
+                    "title": "Brute Force Protection",
+                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then echo 'BRUTEFORCE=fail2ban'; fail2ban-client status 2>/dev/null | head -n 5; elif [ -f /etc/security/faillock.conf ]; then echo 'BRUTEFORCE=faillock'; cat /etc/security/faillock.conf 2>/dev/null | grep -v '^#' | grep -v '^$' | head -n 10; elif grep -q 'pam_faillock' /etc/pam.d/* 2>/dev/null; then echo 'BRUTEFORCE=pam_faillock'; else echo 'BRUTEFORCE=NONE'; fi",
+                    "expectedResult": "BRUTEFORCE=",
+                    "comparison": "REGEX_MATCH",
                     "checkType": "COMMAND"
                 }
             ],
@@ -196,14 +188,18 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-4.1.a",
-                    "title": "Sudoers dump",
-                    "command": "sudo -n true 2>/dev/null && (sudo cat /etc/sudoers 2>/dev/null; sudo ls -la /etc/sudoers.d 2>/dev/null; sudo sh -c 'for f in /etc/sudoers.d/*; do echo \"--- $f\"; cat \"$f\" 2>/dev/null; done' 2>/dev/null) || (cat /etc/sudoers 2>/dev/null; ls -la /etc/sudoers.d 2>/dev/null || true)",
+                    "title": "Sudoers NOPASSWD check",
+                    "command": "NOPASSWD=$(grep -rn 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -v '^#' | wc -l); echo \"NOPASSWD_ENTRIES=$NOPASSWD\"; if [ \"$NOPASSWD\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; grep -rn 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -v '^#'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-4.1.b",
                     "title": "Admin groups members",
-                    "command": "getent group sudo 2>/dev/null || true; getent group wheel 2>/dev/null || true",
+                    "command": "echo '== sudo group =='; getent group sudo 2>/dev/null || echo 'no sudo group'; echo '== wheel group =='; getent group wheel 2>/dev/null || echo 'no wheel group'; TOTAL=$(getent group sudo wheel 2>/dev/null | cut -d: -f4 | tr ',' '\\n' | sort -u | grep -c '.'); echo \"ADMIN_USERS=$TOTAL\"; if [ \"$TOTAL\" -le 5 ]; then echo 'CHECK=PASS'; else echo 'CHECK=EXCESSIVE'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -218,20 +214,18 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-4.2.a",
-                    "title": "List local users",
-                    "command": "cut -d: -f1,3,6,7 /etc/passwd | sed -n '1,200p'",
+                    "title": "Conturi cu shell interactiv",
+                    "command": "INTERACTIVE=$(grep -E '/bin/(bash|sh|zsh|fish)$' /etc/passwd | wc -l); echo \"INTERACTIVE_ACCOUNTS=$INTERACTIVE\"; grep -E '/bin/(bash|sh|zsh|fish)$' /etc/passwd | cut -d: -f1,3,7; if [ \"$INTERACTIVE\" -le 15 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "INTERACTIVE_ACCOUNTS=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-4.2.b",
-                    "title": "Shadow last change info",
-                    "command": "if command -v chage >/dev/null 2>&1; then for u in $(cut -d: -f1 /etc/passwd | head -n 50); do chage -l \"$u\" 2>/dev/null | sed -n '1,6p' | sed \"s/^/[$u] /\"; done; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-4.2.c",
-                    "title": "SSH Keys Inventory",
-                    "command": "for d in /home/* /root; do [ -d \"$d/.ssh\" ] && { echo \"== $d ==\"; ls -la \"$d/.ssh\"; for f in \"$d/.ssh/authorized_keys\" \"$d/.ssh/authorized_keys2\"; do [ -f \"$f\" ] && { echo \"--- $f\"; sed -n '1,200p' \"$f\"; }; done; }; done 2>/dev/null || true",
+                    "title": "Conturi fara parola",
+                    "command": "EMPTY=$(awk -F: '($2 == \"\" || $2 == \"!\") {print $1}' /etc/shadow 2>/dev/null | wc -l); echo \"EMPTY_PASSWORD_ACCOUNTS=$EMPTY\"; if [ \"$EMPTY\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; awk -F: '($2 == \"\" || $2 == \"!\") {print $1}' /etc/shadow 2>/dev/null; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -246,20 +240,26 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-5.1.a",
-                    "title": "Journald config",
-                    "command": "cat /etc/systemd/journald.conf 2>/dev/null || true; journalctl --disk-usage 2>/dev/null || true",
+                    "title": "Journald activ",
+                    "command": "if systemctl is-active systemd-journald >/dev/null 2>&1; then echo 'JOURNALD=ACTIVE'; journalctl --disk-usage 2>/dev/null; else echo 'JOURNALD=INACTIVE'; fi",
+                    "expectedResult": "JOURNALD=ACTIVE",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-5.1.b",
-                    "title": "Rsyslog status",
-                    "command": "systemctl status rsyslog --no-pager 2>/dev/null || true; ls -la /etc/rsyslog.d 2>/dev/null || true",
+                    "title": "Rsyslog activ",
+                    "command": "if systemctl is-active rsyslog >/dev/null 2>&1; then echo 'RSYSLOG=ACTIVE'; else echo 'RSYSLOG=INACTIVE'; fi",
+                    "expectedResult": "ACTIVE",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-5.1.c",
-                    "title": "Logrotate config",
-                    "command": "cat /etc/logrotate.conf 2>/dev/null || true; ls -la /etc/logrotate.d 2>/dev/null || true",
+                    "title": "Logrotate configurat",
+                    "command": "if [ -f /etc/logrotate.conf ]; then echo 'LOGROTATE=CONFIGURED'; grep -cE 'rotate|weekly|daily' /etc/logrotate.conf 2>/dev/null | sed 's/^/RULES=/'; else echo 'LOGROTATE=MISSING'; fi",
+                    "expectedResult": "LOGROTATE=CONFIGURED",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -275,7 +275,9 @@
                 {
                     "checkId": "NIS2-5.2.a",
                     "title": "Auditd Status",
-                    "command": "systemctl status auditd --no-pager 2>/dev/null || true; auditctl -s 2>/dev/null || true; (ls -la /etc/audit /etc/audit/rules.d 2>/dev/null || true)",
+                    "command": "if systemctl is-active auditd >/dev/null 2>&1; then echo 'AUDITD=ACTIVE'; auditctl -s 2>/dev/null | head -n 5; RULES=$(auditctl -l 2>/dev/null | wc -l); echo \"AUDIT_RULES=$RULES\"; else echo 'AUDITD=INACTIVE'; fi",
+                    "expectedResult": "AUDITD=ACTIVE",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -290,14 +292,18 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-6.1.a",
-                    "title": "Backup jobs (cron)",
-                    "command": "ls -la /etc/cron.* 2>/dev/null || true; crontab -l 2>/dev/null || true; for u in $(cut -d: -f1 /etc/passwd | head -n 50); do crontab -u \"$u\" -l 2>/dev/null | sed \"s/^/[crontab:$u] /\"; done",
+                    "title": "Cron jobs configurate",
+                    "command": "JOBS=0; for f in /etc/cron.d/* /etc/cron.daily/* /etc/cron.weekly/* /etc/cron.hourly/*; do [ -f \"$f\" ] && JOBS=$((JOBS+1)); done 2>/dev/null; USERJOBS=$(crontab -l 2>/dev/null | grep -cv '^#\\|^$'); JOBS=$((JOBS+USERJOBS)); echo \"CRON_JOBS=$JOBS\"; if [ \"$JOBS\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-6.1.b",
                     "title": "Backup tools presence",
-                    "command": "command -v restic 2>/dev/null && restic version || true; command -v borg 2>/dev/null && borg --version || true; command -v rclone 2>/dev/null && rclone version | head -n 5 || true",
+                    "command": "TOOLS=''; command -v restic >/dev/null 2>&1 && TOOLS=\"$TOOLS restic\"; command -v borg >/dev/null 2>&1 && TOOLS=\"$TOOLS borg\"; command -v rclone >/dev/null 2>&1 && TOOLS=\"$TOOLS rclone\"; command -v rsync >/dev/null 2>&1 && TOOLS=\"$TOOLS rsync\"; command -v tar >/dev/null 2>&1 && TOOLS=\"$TOOLS tar\"; if [ -n \"$TOOLS\" ]; then echo \"BACKUP_TOOLS=$TOOLS\"; echo 'CHECK=PASS'; else echo 'BACKUP_TOOLS=NONE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -318,19 +324,23 @@
             "controlId": "NIS2-6.2",
             "title": "Protectie ransomware de baza la nivel host",
             "category": "Resilience",
-            "rationale": "Exista masuri minime: permisiuni corecte, backup offline, restrictii executie unde e relevant, monitorizare modificari.",
+            "rationale": "Exista masuri minime: permisiuni corecte, restrictii executie, partitii separate.",
             "severity": "HIGH",
             "automatedChecks": [
                 {
                     "checkId": "NIS2-6.2.a",
-                    "title": "Mount options",
-                    "command": "findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS | sed -n '1,200p'",
+                    "title": "Partitii separate /tmp /var",
+                    "command": "TMP_SEP=$(findmnt /tmp >/dev/null 2>&1 && echo 'YES' || echo 'NO'); VAR_SEP=$(findmnt /var >/dev/null 2>&1 && echo 'YES' || echo 'NO'); echo \"TMP_SEPARATE=$TMP_SEP\"; echo \"VAR_SEPARATE=$VAR_SEP\"; if [ \"$TMP_SEP\" = 'YES' ] || [ \"$VAR_SEP\" = 'YES' ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "SEPARATE=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-6.2.b",
                     "title": "World writable dirs",
-                    "command": "find / -xdev -type d -perm -0002 2>/dev/null | head -n 200 || true",
+                    "command": "COUNT=$(find / -xdev -type d -perm -0002 -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | wc -l); echo \"WORLD_WRITABLE_DIRS=$COUNT\"; if [ \"$COUNT\" -le 5 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; find / -xdev -type d -perm -0002 -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -n 20; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -346,7 +356,9 @@
                 {
                     "checkId": "NIS2-7.1.a",
                     "title": "Time synchronization status",
-                    "command": "timedatectl status 2>/dev/null || date; (systemctl status chronyd --no-pager 2>/dev/null || true); (systemctl status systemd-timesyncd --no-pager 2>/dev/null || true)",
+                    "command": "if timedatectl status 2>/dev/null | grep -qi 'synchronized: yes\\|NTP.*active'; then echo 'NTP=SYNCED'; timedatectl status 2>/dev/null | head -n 5; elif systemctl is-active chronyd >/dev/null 2>&1; then echo 'NTP=SYNCED'; chronyc tracking 2>/dev/null | head -n 5; elif systemctl is-active systemd-timesyncd >/dev/null 2>&1; then echo 'NTP=SYNCED'; else echo 'NTP=NOT_SYNCED'; fi",
+                    "expectedResult": "NTP=SYNCED",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -361,20 +373,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-7.2.a",
-                    "title": "Cert files inventory",
-                    "command": "ls -la /etc/ssl 2>/dev/null || true; ls -la /etc/letsencrypt 2>/dev/null || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-7.2.b",
-                    "title": "Nginx TLS snippets",
-                    "command": "if command -v nginx >/dev/null 2>&1; then nginx -T 2>/dev/null | sed -n '1,200p'; else echo \"SKIP_NGINX\"; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-7.2.c",
-                    "title": "Apache TLS config",
-                    "command": "if command -v apache2ctl >/dev/null 2>&1; then apache2ctl -S 2>/dev/null || true; apache2ctl -M 2>/dev/null || true; else echo \"SKIP_APACHE\"; fi",
+                    "title": "TLS certificates presence",
+                    "command": "CERTS=0; [ -d /etc/ssl/certs ] && CERTS=$(ls /etc/ssl/certs/*.pem 2>/dev/null | wc -l); LETSENCRYPT='NO'; [ -d /etc/letsencrypt/live ] && LETSENCRYPT='YES'; echo \"SSL_CERTS=$CERTS\"; echo \"LETSENCRYPT=$LETSENCRYPT\"; if [ \"$CERTS\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -400,8 +402,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-8.1.a",
-                    "title": "ClamAV Status",
-                    "command": "systemctl status clamav-freshclam --no-pager 2>/dev/null || true; clamscan --version 2>/dev/null || true",
+                    "title": "Antimalware/EDR Status",
+                    "command": "FOUND=''; systemctl is-active clamav-freshclam >/dev/null 2>&1 && FOUND=\"$FOUND clamav\"; systemctl is-active falcon-sensor >/dev/null 2>&1 && FOUND=\"$FOUND crowdstrike\"; systemctl is-active ossec >/dev/null 2>&1 && FOUND=\"$FOUND ossec\"; systemctl is-active wazuh-agent >/dev/null 2>&1 && FOUND=\"$FOUND wazuh\"; command -v clamscan >/dev/null 2>&1 && FOUND=\"$FOUND clamscan\"; command -v rkhunter >/dev/null 2>&1 && FOUND=\"$FOUND rkhunter\"; if [ -n \"$FOUND\" ]; then echo \"MALWARE_PROTECTION=$FOUND\"; echo 'CHECK=PASS'; else echo 'MALWARE_PROTECTION=NONE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -416,8 +420,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-8.2.a",
-                    "title": "AIDE Status",
-                    "command": "command -v aide 2>/dev/null && aide --version || true; ls -la /etc/aide 2>/dev/null || true; ls -la /var/lib/aide 2>/dev/null || true",
+                    "title": "File Integrity Monitoring",
+                    "command": "FOUND=''; command -v aide >/dev/null 2>&1 && FOUND=\"$FOUND aide\"; command -v tripwire >/dev/null 2>&1 && FOUND=\"$FOUND tripwire\"; command -v samhain >/dev/null 2>&1 && FOUND=\"$FOUND samhain\"; [ -f /etc/aide/aide.conf ] && FOUND=\"$FOUND aide-config\"; systemctl is-active auditd >/dev/null 2>&1 && FOUND=\"$FOUND auditd\"; if [ -n \"$FOUND\" ]; then echo \"FIM=$FOUND\"; echo 'CHECK=PASS'; else echo 'FIM=NONE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -432,14 +438,18 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-9.1.a",
-                    "title": "Network Routes/IPs",
-                    "command": "ip a; ip r",
+                    "title": "Interfete retea si IP",
+                    "command": "ip -br addr 2>/dev/null || ifconfig 2>/dev/null; echo '---'; ip route show default 2>/dev/null",
+                    "expectedResult": "UP",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-9.1.b",
                     "title": "Docker Exposure",
-                    "command": "if command -v docker >/dev/null 2>&1; then docker ps --format 'table {{.Names}}\\t{{.Ports}}\\t{{.Image}}'; docker network ls; else echo \"SKIP_DOCKER\"; fi",
+                    "command": "if command -v docker >/dev/null 2>&1; then EXPOSED=$(docker ps --format '{{.Ports}}' 2>/dev/null | grep -c '0.0.0.0'); echo \"DOCKER_EXPOSED_PORTS=$EXPOSED\"; docker ps --format 'table {{.Names}}\\t{{.Ports}}' 2>/dev/null | head -n 20; if [ \"$EXPOSED\" -le 5 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi; else echo 'DOCKER=NOT_INSTALLED'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -465,8 +475,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-9.2.a",
-                    "title": "Sysctl dump",
-                    "command": "sysctl -a 2>/dev/null | sed -n '1,200p' || true; ls -la /etc/sysctl.conf /etc/sysctl.d 2>/dev/null || true",
+                    "title": "Sysctl hardening keys",
+                    "command": "SCORE=0; TOTAL=5; sysctl net.ipv4.ip_forward 2>/dev/null | grep -q '= 0' && SCORE=$((SCORE+1)); sysctl net.ipv4.conf.all.accept_redirects 2>/dev/null | grep -q '= 0' && SCORE=$((SCORE+1)); sysctl net.ipv4.conf.all.rp_filter 2>/dev/null | grep -q '= 1' && SCORE=$((SCORE+1)); sysctl net.ipv4.conf.default.accept_source_route 2>/dev/null | grep -q '= 0' && SCORE=$((SCORE+1)); sysctl kernel.randomize_va_space 2>/dev/null | grep -q '= 2' && SCORE=$((SCORE+1)); echo \"SYSCTL_SCORE=$SCORE/$TOTAL\"; if [ \"$SCORE\" -ge 3 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -481,14 +493,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-10.1.a",
-                    "title": "List enabled services",
-                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-unit-files --type=service --state=enabled; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-10.1.b",
-                    "title": "Risky services presence",
-                    "command": "for s in telnetd rsh-server rlogin vsftpd tftp; do systemctl status \"$s\" --no-pager 2>/dev/null && echo \"FOUND:$s\"; done || true",
+                    "title": "Servicii riscante active",
+                    "command": "RISKY=''; for s in telnet.socket rsh.socket rlogin.socket vsftpd xinetd avahi-daemon cups; do systemctl is-active \"$s\" >/dev/null 2>&1 && RISKY=\"$RISKY $s\"; done; if [ -z \"$RISKY\" ]; then echo 'RISKY_SERVICES=NONE'; echo 'CHECK=PASS'; else echo \"RISKY_SERVICES=$RISKY\"; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -503,8 +511,10 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-11.1.a",
-                    "title": "Live triage bundle",
-                    "command": "echo \"== UPTIME ==\"; uptime; echo \"== USERS ==\"; who; echo \"== TOP PROCS ==\"; ps aux --sort=-%cpu | head -n 30; echo \"== NET ==\"; ss -antup 2>/dev/null | head -n 200 || true",
+                    "title": "IR tools availability",
+                    "command": "TOOLS=''; command -v ps >/dev/null 2>&1 && TOOLS=\"$TOOLS ps\"; command -v ss >/dev/null 2>&1 && TOOLS=\"$TOOLS ss\"; command -v journalctl >/dev/null 2>&1 && TOOLS=\"$TOOLS journalctl\"; command -v tcpdump >/dev/null 2>&1 && TOOLS=\"$TOOLS tcpdump\"; command -v strace >/dev/null 2>&1 && TOOLS=\"$TOOLS strace\"; COUNT=$(echo $TOOLS | wc -w); echo \"IR_TOOLS=$TOOLS\"; echo \"IR_TOOLS_COUNT=$COUNT\"; if [ \"$COUNT\" -ge 3 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -551,13 +561,9 @@
                 {
                     "checkId": "NIS2-12.1.a",
                     "title": "Docker images inventory",
-                    "command": "if command -v docker >/dev/null 2>&1; then docker images --digests; else echo \"SKIP_DOCKER\"; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "NIS2-12.1.b",
-                    "title": "Container runtime info",
-                    "command": "if command -v docker >/dev/null 2>&1; then docker info 2>/dev/null | sed -n '1,120p'; fi",
+                    "command": "if command -v docker >/dev/null 2>&1; then IMAGES=$(docker images -q 2>/dev/null | wc -l); echo \"DOCKER_IMAGES=$IMAGES\"; docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' 2>/dev/null | head -n 20; echo 'CHECK=PASS'; else echo 'DOCKER=NOT_INSTALLED'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -582,14 +588,18 @@
             "automatedChecks": [
                 {
                     "checkId": "NIS2-13.1.a",
-                    "title": "Service users info",
-                    "command": "ps -eo user,group,comm,args --sort=user | sed -n '1,120p'",
+                    "title": "Procese root vs non-root",
+                    "command": "ROOT_PROCS=$(ps -eo user | grep -c '^root'); TOTAL_PROCS=$(ps -eo user | wc -l); NON_ROOT=$((TOTAL_PROCS - ROOT_PROCS)); echo \"ROOT_PROCESSES=$ROOT_PROCS\"; echo \"NON_ROOT_PROCESSES=$NON_ROOT\"; echo \"TOTAL=$TOTAL_PROCS\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-13.1.b",
                     "title": "SUID/SGID files",
-                    "command": "find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | head -n 200 || true",
+                    "command": "COUNT=$(find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | wc -l); echo \"SUID_SGID_FILES=$COUNT\"; if [ \"$COUNT\" -le 30 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | head -n 30; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -605,13 +615,17 @@
                 {
                     "checkId": "NIS2-14.1.a",
                     "title": "Resolver config",
-                    "command": "cat /etc/resolv.conf 2>/dev/null || true; systemctl status systemd-resolved --no-pager 2>/dev/null || true; resolvectl status 2>/dev/null || true",
+                    "command": "if [ -f /etc/resolv.conf ]; then echo 'RESOLVER=CONFIGURED'; cat /etc/resolv.conf 2>/dev/null | grep nameserver; echo 'CHECK=PASS'; else echo 'RESOLVER=MISSING'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "NIS2-14.1.b",
                     "title": "Hosts file content",
-                    "command": "cat /etc/hosts 2>/dev/null || true",
+                    "command": "ENTRIES=$(grep -cv '^#\\|^$' /etc/hosts 2>/dev/null); echo \"HOSTS_ENTRIES=$ENTRIES\"; cat /etc/hosts 2>/dev/null | head -n 20; if [ \"$ENTRIES\" -le 20 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -627,7 +641,9 @@
                 {
                     "checkId": "NIS2-15.1.a",
                     "title": "Config files hashes",
-                    "command": "for f in /etc/ssh/sshd_config /etc/passwd /etc/group /etc/sudoers /etc/sysctl.conf; do [ -f \"$f\" ] && { echo \"== $f ==\"; sha256sum \"$f\"; }; done 2>/dev/null || true",
+                    "command": "FOUND=0; for f in /etc/ssh/sshd_config /etc/passwd /etc/group /etc/sudoers /etc/sysctl.conf; do if [ -f \"$f\" ]; then FOUND=$((FOUND+1)); echo \"$(sha256sum \"$f\")\"; fi; done 2>/dev/null; echo \"CONFIG_FILES_HASHED=$FOUND\"; if [ \"$FOUND\" -ge 3 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],

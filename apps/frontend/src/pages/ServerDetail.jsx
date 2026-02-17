@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import api from '../api/client';
 import './ServerDetail.css';
+import ShareServerModal from '../components/ShareServerModal';
 
 function ServerDetail() {
     const { id } = useParams();
@@ -16,6 +17,7 @@ function ServerDetail() {
     const [audits, setAudits] = useState([]);
     const [templates, setTemplates] = useState([]);
     const [showAuditModal, setShowAuditModal] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [runningAudit, setRunningAudit] = useState(false);
     const [auditError, setAuditError] = useState(null);
@@ -102,7 +104,7 @@ function ServerDetail() {
             console.log('Conectat la audit status stream');
         });
 
-        // Ascultare schimbari status audituri pentru actualizare lista
+        // Ascultare status audit
         auditSocket.on('audit:status', (data) => {
             if (data.serverId === id) {
                 // Reincarcare audituri la schimbarea statusului
@@ -120,7 +122,7 @@ function ServerDetail() {
 
     const loadServer = async () => {
         try {
-            // Preluare server, metrici, inventar si token inrolare
+            // Preluare date server
             const [serverRes, metricsRes, inventoryRes, tokenRes] = await Promise.all([
                 api.get(`/servers/${id}`),
                 api.get(`/servers/${id}/metrics/latest`),
@@ -132,7 +134,7 @@ function ServerDetail() {
                 ...serverRes.data,
                 metrics: metricsRes.data,
                 inventory: inventoryRes.data,
-                // Adaugare token la identitate agent
+                // Adaugare token enrollment
                 agentIdentity: {
                     ...serverRes.data.agentIdentity,
                     enrollToken: tokenRes.data.enrollToken
@@ -234,7 +236,27 @@ function ServerDetail() {
 
     const formatDate = (date) => {
         if (!date) return '-';
-        return new Date(date).toLocaleString('ro-RO');
+        return new Date(date).toLocaleString('ro-RO', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    const calculateTotalScore = (audit) => {
+        const autoCount = audit._count?.checkResults || 0;
+        const manualCount = audit._count?.manualTaskResults || 0;
+        const totalChecks = autoCount + manualCount;
+
+        if (totalChecks === 0) return 0;
+
+        const autoScore = audit.automatedCompliancePercent || 0;
+        const manualScore = audit.manualCompletionPercent || 0;
+
+        const weightedScore = ((autoScore * autoCount) + (manualScore * manualCount)) / totalChecks;
+        return weightedScore;
     };
 
     const getScoreColor = (score) => {
@@ -269,14 +291,35 @@ function ServerDetail() {
     const isActive = server.status === 'ONLINE' || server.status === 'online';
     const hasAgent = !!server.agentIdentity;
     const enrollToken = server.agentIdentity?.enrollToken;
-    const enrollCommand = `./bittrail-agent enroll --token ${enrollToken || 'TOKEN'} --server ${window.location.origin}`;
+    // Logica URL Backend
+    // Localhost in browser -> localhost
+    // IP in browser -> IP backend
+    const currentHostname = window.location.hostname;
+    const backendPort = '3000'; // Port implicit backend
+
+    let apiUrl = import.meta.env.VITE_API_URL;
+
+    // Fortare IP daca e setat localhost dar accesam via IP
+    if (apiUrl && apiUrl.includes('localhost') && currentHostname !== 'localhost') {
+        apiUrl = `${window.location.protocol}//${currentHostname}:${backendPort}`;
+    } else if (!apiUrl) {
+        // Fallback standard
+        apiUrl = `${window.location.protocol}//${currentHostname}:${backendPort}`;
+    }
+
+    // Asigurare protocol pentru comenzi shell
+    let safeApiUrl = apiUrl.startsWith('http') ? apiUrl : `http:${apiUrl.startsWith('//') ? '' : '//'}${apiUrl}`;
+
+    // Eliminare sufix /api
+    safeApiUrl = safeApiUrl.replace(/\/api$/, '');
+
+    const enrollCommand = `sudo ./bittrail-agent enroll --token ${enrollToken || 'TOKEN'} --server ${safeApiUrl}`;
 
     // Versiune agent si comparatie
     const installedVersion = server.agentIdentity?.version;
     const needsUpdate = latestAgentVersion && installedVersion && latestAgentVersion !== installedVersion;
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     const updateCommand = `sudo systemctl stop bittrail-agent
-curl -fsSL ${apiUrl}/downloads/bittrail-agent -o /tmp/bittrail-agent
+curl -fsSL ${safeApiUrl}/downloads/bittrail-agent -o /tmp/bittrail-agent
 chmod +x /tmp/bittrail-agent
 sudo mv /tmp/bittrail-agent /usr/local/bin/bittrail-agent
 sudo systemctl start bittrail-agent
@@ -332,6 +375,13 @@ bittrail-agent version`;
                             <span className="material-symbols-outlined">play_arrow</span>
                             Ruleaza Audit
                         </button>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => setShowShareModal(true)}
+                        >
+                            <span className="material-symbols-outlined">group_add</span>
+                            Gestionare Acces
+                        </button>
                     </div>
                 </div>
             </div>
@@ -368,7 +418,7 @@ bittrail-agent version`;
             <div className="tab-content">
                 {activeTab === 'overview' && (
                     <>
-                        {/* Afisare mesaj daca serverul este offline */}
+                        {/* Mesaj server offline */}
                         {!isActive && (
                             <div className="card" style={{
                                 padding: '2rem',
@@ -391,10 +441,10 @@ bittrail-agent version`;
                             </div>
                         )}
 
-                        {/* Afisare metrici doar daca serverul este online */}
+                        {/* Afisare metrici (daca e online) */}
                         {isActive && (
                             <div className="metrics-grid">
-                                {/* Continut metrici (acces sigur) */}
+                                {/* Continut metrici */}
                                 <div className="metric-card">
                                     <div className="metric-header">
                                         <div>
@@ -508,6 +558,7 @@ bittrail-agent version`;
                                         <th>Status</th>
                                         <th>Template</th>
                                         <th>Data</th>
+                                        <th>Scor Total</th>
                                         <th>Scor Automat</th>
                                         <th>Scor Manual</th>
                                         <th style={{ textAlign: 'right' }}>Actiuni</th>
@@ -527,6 +578,21 @@ bittrail-agent version`;
                                             </td>
                                             <td style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
                                                 {formatDate(audit.createdAt)}
+                                            </td>
+                                            <td>
+                                                {(() => {
+                                                    const totalScore = calculateTotalScore(audit);
+                                                    return (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <span style={{ fontWeight: 700, color: getScoreColor(totalScore) }}>
+                                                                {totalScore.toFixed(1)}%
+                                                            </span>
+                                                            <div className="progress" style={{ width: '60px', height: '6px' }}>
+                                                                <div className="progress-bar" style={{ width: `${totalScore}%`, backgroundColor: getScoreColor(totalScore) }}></div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
                                             <td>
                                                 {audit.automatedCompliancePercent != null ? (
@@ -591,35 +657,11 @@ bittrail-agent version`;
 
                 {activeTab === 'enrollment' && (
                     <div className="enrollment-section">
-                        {/* Versiune Agent */}
-                        <div className="enrollment-card">
-                            <h3>Versiune Agent</h3>
-                            <div style={{ display: 'flex', gap: '2rem', marginTop: '1rem' }}>
-                                <div>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Instalat</span>
-                                    <p style={{ fontSize: '1.25rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                                        {installedVersion || 'N/A'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Disponibil</span>
-                                    <p style={{ fontSize: '1.25rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                                        {latestAgentVersion || 'N/A'}
-                                    </p>
-                                </div>
-                            </div>
-                            {needsUpdate && (
-                                <div className="alert alert-warning" style={{ marginTop: '1rem' }}>
-                                    <span className="material-symbols-outlined">update</span>
-                                    <span>O versiune noua a agentului este disponibila! ({installedVersion} → {latestAgentVersion})</span>
-                                </div>
-                            )}
-                        </div>
 
                         {/* Token Inrolare */}
                         <div className="enrollment-card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <h3>Token Enrollment</h3>
+                                <h3>1. Token Enrollment</h3>
                                 <button className="btn btn-secondary btn-sm" onClick={handleRegenerateToken}>
                                     <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>refresh</span>
                                     Regenereaza
@@ -631,16 +673,27 @@ bittrail-agent version`;
                                     <span className="material-symbols-outlined">{copied ? 'check' : 'content_copy'}</span>
                                 </button>
                             </div>
-                            <p className="helper-text" style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                Regenerarea va invalida vechiul token. Foloseste-l doar pentru instalari noi.
-                            </p>
                         </div>
 
-                        {/* Comanda Inrolare (pentru instalare noua) */}
+                        {/* Instalare Noua */}
                         <div className="enrollment-card">
-                            <h3>Comanda Enroll</h3>
+                            <h3>2. Instalare Rapida (One-Liner)</h3>
                             <p className="helper-text" style={{ marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                Pentru instalare noua pe server:
+                                Descarca si instaleaza agentul automat. Scriptul va intreba daca doresti instalare ca serviciu.
+                            </p>
+                            <div className="code-block">
+                                <code>{`curl -fsSL ${safeApiUrl}/downloads/install.sh | sudo bash -s -- ${safeApiUrl}`}</code>
+                                <button className="copy-btn" onClick={() => copyToClipboard(`curl -fsSL ${safeApiUrl}/downloads/install.sh | sudo bash -s -- ${safeApiUrl}`)}>
+                                    <span className="material-symbols-outlined">content_copy</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Inrolare */}
+                        <div className="enrollment-card">
+                            <h3>3. Inrolare Agent</h3>
+                            <p className="helper-text" style={{ marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                Conecteaza agentul instalat la acest server:
                             </p>
                             <div className="code-block">
                                 <code>{enrollCommand}</code>
@@ -650,21 +703,35 @@ bittrail-agent version`;
                             </div>
                         </div>
 
-                        {/* Comenzi Actualizare (doar daca exista actualizare) */}
-                        {needsUpdate && (
-                            <div className="enrollment-card" style={{ borderColor: 'var(--warning)' }}>
-                                <h3>Comenzi Update Agent</h3>
+                        {/* Update */}
+                        {hasAgent && (
+                            <div className="enrollment-card">
+                                <h3>Actualizare Agent</h3>
                                 <p className="helper-text" style={{ marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                    Ruleaza pe server pentru a actualiza agentul:
+                                    Actualizeaza la ultima versiune pastrand configuratia:
                                 </p>
-                                <div className="code-block" style={{ whiteSpace: 'pre-wrap' }}>
-                                    <code>{updateCommand}</code>
-                                    <button className="copy-btn" onClick={() => copyToClipboard(updateCommand)}>
+                                <div className="code-block">
+                                    <code>{`curl -fsSL ${safeApiUrl}/downloads/update.sh | sudo bash -s -- ${safeApiUrl}`}</code>
+                                    <button className="copy-btn" onClick={() => copyToClipboard(`curl -fsSL ${safeApiUrl}/downloads/update.sh | sudo bash -s -- ${safeApiUrl}`)}>
                                         <span className="material-symbols-outlined">content_copy</span>
                                     </button>
                                 </div>
                             </div>
                         )}
+
+                        {/* Uninstall */}
+                        <div className="enrollment-card" style={{ borderColor: 'var(--border)' }}>
+                            <h3>Dezinstalare</h3>
+                            <p className="helper-text" style={{ marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                Sterge serviciul si fisierele agentului:
+                            </p>
+                            <div className="code-block">
+                                <code>{`curl -fsSL ${safeApiUrl}/downloads/uninstall.sh | sudo bash`}</code>
+                                <button className="copy-btn" onClick={() => copyToClipboard(`curl -fsSL ${safeApiUrl}/downloads/uninstall.sh | sudo bash`)}>
+                                    <span className="material-symbols-outlined">content_copy</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
@@ -723,6 +790,14 @@ bittrail-agent version`;
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Modala Partajare */}
+            {showShareModal && (
+                <ShareServerModal
+                    serverId={id}
+                    onClose={() => setShowShareModal(false)}
+                />
             )}
         </div>
     );

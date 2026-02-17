@@ -25,12 +25,12 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
     container_name: bittrail-backend
+    command: npm run start:dev
     env_file:
       - ./apps/backend/.env
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bittrail?schema=public
-      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-key-change-in-production}
       BACKEND_PORT: 3000
       CORS_ORIGIN: http://localhost:5173
     ports:
@@ -42,22 +42,33 @@ services:
       - bittrail-network
     volumes:
       - evidence_files:/app/evidence
+      - ./apps/backend:/app/apps/backend
+      - ./apps/backend/src:/app/src
+      - ./apps/backend/package.json:/app/package.json
+      # Mount certs for persistence
+      - ./apps/backend/certs:/app/certs
+      # Mount templates if needed, or keep existing mount
       - ./templates:/app/templates:ro
-      - ./apps/backend/public:/app/public:ro
+      - ./apps/backend/public:/app/public
 
   frontend:
     build:
       context: ./apps/frontend
       dockerfile: Dockerfile
+      target: development
     container_name: bittrail-frontend
+    command: npm run dev
     ports:
-      - "5173:80"
+      - "5173:5173"
+
     depends_on:
       - backend
     networks:
       - bittrail-network
-
-  # Agent demo - pentru testare locala
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
+    # Agent demo - test local
   agent-demo:
     build:
       context: ./apps/agent
@@ -69,7 +80,7 @@ services:
       - backend
     networks:
       - bittrail-network
-    # Agentul real ruleaza pe host, nu in container
+    # Agentul real ruleaza pe host
 
 volumes:
   postgres_data:

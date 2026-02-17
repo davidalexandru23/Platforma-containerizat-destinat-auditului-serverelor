@@ -19,8 +19,8 @@ fi
 
 # Verificare arhitectura sistem
 ARCH=$(uname -m)
-if [ "$ARCH" != "x86_64" ]; then
-    echo "ATENTIE: Acest script este pentru x86_64, detectat: $ARCH"
+if [ "$ARCH" != "x86_64" ] && [ "$ARCH" != "aarch64" ]; then
+    echo "ATENTIE: Arhitectura detectata: $ARCH. Scriptul este testat pe x86_64 si aarch64."
     read -p "Continui oricum? (y/n) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -28,71 +28,106 @@ if [ "$ARCH" != "x86_64" ]; then
     fi
 fi
 
-echo "[1/4] Verificare binar..."
-if [ ! -f "$BINARY_NAME" ]; then
-    echo "EROARE: Nu gasesc $BINARY_NAME in directorul curent"
-    echo "Asigura-te ca ai copiat binarul compilat aici"
-    exit 1
-fi
+# Verificare prerequisites
+for cmd in curl sudo; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "EROARE: $cmd nu este instalat."
+        exit 1
+    fi
+done
 
-echo "[2/4] Instalare binar..."
+# Setare URL backend
+# Script rulat de obicei via curl pipe
+# Daca e rulat direct, preluam URL
+# Presupunem script si binar in acelasi loc sau comanda compusa
+
+echo "[1/4] Verificare si Descarcare Binar..."
+    # Detectare arhitectura pentru download
+    DL_ARCH=""
+    if [ "$ARCH" = "x86_64" ]; then
+        DL_ARCH="bittrail-agent-linux-amd64"
+    elif [ "$ARCH" = "aarch64" ]; then
+        DL_ARCH="bittrail-agent-linux-arm64"
+    else
+        echo "Arhitectura necunoscuta pentru download automat: $ARCH"
+        exit 1
+    fi
+
+    # Preluare URL din primul argument pozitional
+    SERVER_URL="${1:-$SERVER_URL}"
+
+    # Setare URL backend implicit daca nu este furnizat
+    if [ -z "$SERVER_URL" ]; then
+        # Fallback implicit (trebuie furnizat in argumente)
+        echo "EROARE: URL-ul backend-ului nu a fost furnizat."
+        echo "Utilizare: curl ... | sudo bash -s -- http://BACKEND_IP:3000"
+        exit 1
+    fi
+    
+    # Clean URL
+    SERVER_URL=${SERVER_URL%/}
+    
+    echo "  Descarc $DL_ARCH de la $SERVER_URL (overwrite)..."
+    curl -fsSL "$SERVER_URL/downloads/$DL_ARCH" -o "$BINARY_NAME"
+    if [ $? -ne 0 ]; then
+        echo "EROARE la descarcare. Verifica URL-ul."
+        exit 1
+    fi
+
+echo "[2/4] Instalare..."
+chmod +x "$BINARY_NAME"
 cp "$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
-chmod +x "$INSTALL_DIR/$BINARY_NAME"
-echo "  Instalat: $INSTALL_DIR/$BINARY_NAME"
 
-echo "[3/4] Creare director configurare..."
+echo "[3/4] Configurare..."
 mkdir -p "$CONFIG_DIR"
+mkdir -p "$CONFIG_DIR/certs"
 chmod 755 "$CONFIG_DIR"
-echo "  Creat: $CONFIG_DIR"
 
-echo "[4/4] Creare fisier serviciu systemd..."
-cat > "$SERVICE_FILE" << 'EOF'
+# Prompt interactiv - Serviciu sau Standalone?
+echo ""
+echo "Cum vrei sa ruleze agentul?"
+echo "  1) Ca serviciu systemd (Recomandat - porneste automat)"
+echo "  2) Standalone (Doar il rulez manual)"
+
+if [ -t 0 ]; then
+    read -p "Alege (1/2) [1]: " CHOICE
+else
+    echo -n "Alege (1/2) [1]: "
+    read CHOICE < /dev/tty
+fi
+CHOICE=${CHOICE:-1}
+
+if [ "$CHOICE" = "1" ]; then
+    echo "[4/4] Configurare Systemd..."
+    cat > "$SERVICE_FILE" << EOF
 [Unit]
-Description=BitTrail Agent - Server Monitoring and Audit
-Documentation=https://github.com/bittrail/agent
+Description=BitTrail Agent
 After=network-online.target
-Wants=network-online.target
 
 [Service]
-Type=simple
-ExecStart=/usr/local/bin/bittrail-agent run
+ExecStart=$INSTALL_DIR/$BINARY_NAME run
 Restart=always
-RestartSec=10
-
-# Logare
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=bittrail-agent
-
-# Permisiuni - agentul necesita acces complet la sistem
-# Nerespunzator restrictionare
 User=root
 Group=root
-
-# Variabile mediu
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [Install]
 WantedBy=multi-user.target
 EOF
+    systemctl daemon-reload
+    systemctl enable bittrail-agent
+    echo "  Serviciu instalat si activat."
+    echo ""
+    echo "Pentru a porni acum, ruleaza: systemctl start bittrail-agent"
+else
+    echo "[4/4] Skip Systemd."
+    echo ""
+    echo "Agentul este instalat in $INSTALL_DIR/$BINARY_NAME"
+fi
 
-systemctl daemon-reload
-echo "  Creat: $SERVICE_FILE"
-
 echo ""
-echo "Instalare completa!"
+echo "Instalare Completa!"
+echo "Nu uita sa inrolezi agentul daca nu ai facut-o deja:"
+echo "  sudo $BINARY_NAME enroll --server URL --token TOKEN"
 echo ""
-echo "PASUL URMATOR - Inroleaza agentul:"
-echo ""
-echo "  sudo $BINARY_NAME enroll --server https://BITTRAIL_SERVER_URL --token TOKEN_DIN_INTERFATA_WEB"
-echo ""
-echo "Apoi porneste serviciul:"
-echo ""
-echo "  sudo systemctl enable bittrail-agent"
-echo "  sudo systemctl start bittrail-agent"
-echo ""
-echo "Verifica status:"
-echo ""
-echo "  sudo systemctl status bittrail-agent"
-echo "  sudo journalctl -u bittrail-agent -f"
 

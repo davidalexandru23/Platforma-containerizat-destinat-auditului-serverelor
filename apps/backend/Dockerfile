@@ -23,21 +23,21 @@ COPY apps/backend/prisma ./prisma/
 COPY apps/backend/prisma.config.ts ./
 
 # Install dependencies
-RUN npm install
-
-# Generate Prisma Client (Prisma 7 with config file)
-# We need a dummy DATABASE_URL for generation to succeed
-RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate --config=prisma.config.ts
+RUN npm ci
 
 # Copy source code
 COPY apps/backend .
 
+# Generate Prisma Client (Prisma 7 with config file) - must be after full source copy
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate --config=prisma.config.ts
+
 # Copy built agent from Stage 1
-# Create public directory
 RUN mkdir -p public
 COPY --from=agent-builder /build/bittrail-agent-linux-amd64 ./public/bittrail-agent
 COPY --from=agent-builder /build/bittrail-agent-linux-arm64 ./public/bittrail-agent-arm64
 COPY apps/agent/bittrail-agent.service ./public/bittrail-agent.service
+COPY apps/agent/install.sh ./public/install.sh
+COPY apps/agent/uninstall.sh ./public/uninstall.sh
 
 # Create uploads directory
 RUN mkdir -p uploads/evidence

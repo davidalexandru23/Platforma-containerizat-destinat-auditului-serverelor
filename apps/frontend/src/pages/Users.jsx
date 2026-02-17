@@ -32,7 +32,7 @@ function Users() {
     const handleRoleChange = async (userId, newRoleId) => {
         try {
             await api.patch(`/users/${userId}/role`, { roleId: newRoleId });
-            // Update local state - ensuring we update the role object with the new one found in roles list
+            // Actualizare stare locala
             const newRole = roles.find(r => r.id === newRoleId);
             setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
         } catch (error) {
@@ -52,7 +52,7 @@ function Users() {
     };
 
     const getRoleBadge = (roleName) => {
-        // Safe check if role is object or string
+        // Verificare tip rol
         const name = (typeof roleName === 'object' ? roleName?.name : roleName) || '';
         const roleLower = name.toLowerCase();
 
@@ -84,7 +84,7 @@ function Users() {
 
     return (
         <div className="users-page">
-            {/* Page Header */}
+            {/* Antet Pagina */}
             <div className="page-header">
                 <div className="page-header-row">
                     <div>
@@ -94,7 +94,7 @@ function Users() {
                 </div>
             </div>
 
-            {/* Role Legend */}
+            {/* Legenda Roluri */}
             <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
                 <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -112,7 +112,7 @@ function Users() {
                 </div>
             </div>
 
-            {/* Users Table */}
+            {/* Tabel Utilizatori */}
             <div className="table-container">
                 {loading ? (
                     <div className="empty-state" style={{ padding: '3rem' }}>

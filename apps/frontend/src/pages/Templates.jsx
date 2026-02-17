@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import AutomatedCheckEditor from '../components/TemplateEditor/AutomatedCheckEditor';
+import { useAuth } from '../context/AuthContext';
 
 function Templates() {
     const { id: urlTemplateId } = useParams();
     const navigate = useNavigate();
+    const { isAdmin } = useAuth();
     const [templates, setTemplates] = useState([]);
     const [predefinedTemplates, setPredefinedTemplates] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -22,7 +24,7 @@ function Templates() {
         loadPredefinedTemplates();
     }, []);
 
-    // Manipulare parametru URL pentru accesare directa sablon
+    // Gestionare URL direct
     useEffect(() => {
         if (urlTemplateId && templates.length > 0) {
             // Selectare doar daca nu este deja selectat
@@ -55,19 +57,26 @@ function Templates() {
         }
     };
 
-    // Lista combinata toate sabloanele
+    // Lista completa sabloane (fara duplicate)
     const getAllTemplates = () => {
         const saved = templates.map(t => ({ ...t, source: 'saved' }));
-        const predefined = predefinedTemplates.map(pt => ({
-            id: `predefined-${pt.filename}`,
-            name: pt.name,
-            description: pt.description,
-            type: pt.type,
-            controlsCount: pt.controlsCount,
-            filename: pt.filename,
-            source: 'predefined',
-            versions: [{ isActive: true }]
-        }));
+
+        // Filtram template-urile predefinite care sunt deja importate in baza de date
+        const savedNames = new Set(saved.filter(t => t.isBuiltIn).map(t => t.name));
+
+        const predefined = predefinedTemplates
+            .filter(pt => !savedNames.has(pt.name))
+            .map(pt => ({
+                id: `predefined-${pt.filename}`,
+                name: pt.name,
+                description: pt.description,
+                type: pt.type,
+                controlsCount: pt.controlsCount,
+                filename: pt.filename,
+                source: 'predefined',
+                versions: [{ isActive: true }]
+            }));
+
         return [...saved, ...predefined];
     };
 
@@ -85,7 +94,8 @@ function Templates() {
 
         if (filter === 'published') return all.filter(t => t.source === 'saved' && t.versions?.some(v => v.isActive));
         if (filter === 'draft') return all.filter(t => t.source === 'saved' && !t.versions?.some(v => v.isActive));
-        if (filter === 'predefined') return all.filter(t => t.source === 'predefined');
+        // Predefined include si cele BuiltIn din DB
+        if (filter === 'predefined') return all.filter(t => t.source === 'predefined' || t.isBuiltIn);
         return all;
     };
 
@@ -104,7 +114,7 @@ function Templates() {
         setSelectedTemplate(templateWithSource);
 
         if (templateWithSource.source === 'predefined') {
-            // Incarcare controale din JSON predefinit
+            // Incarcare controale predefinite
             try {
                 const response = await api.get(`/templates/predefined/${templateWithSource.filename}`);
                 setSelectedTemplateControls(response.data?.controls || []);
@@ -113,12 +123,12 @@ function Templates() {
                 setSelectedTemplateControls([]);
             }
         } else {
-            // Incarcare controale din sablon salvat
+            // Incarcare controale salvate
             try {
                 const response = await api.get(`/templates/${templateWithSource.id}`);
                 const version = response.data?.versions?.[0];
                 setSelectedTemplateControls(version?.controls || []);
-                // Actualizare cu date complete dar pastrare sursa
+                // Actualizare date complete
                 setSelectedTemplate({ ...response.data, source: 'saved' });
             } catch (e) {
                 console.error('Error loading template controls:', e);
@@ -126,7 +136,7 @@ function Templates() {
             }
         }
 
-        // Actualizare URL doar daca este necesar pentru evitare bucla useEffect
+        // Actualizare URL (evitare bucla)
         if (templateWithSource.source === 'saved' && urlTemplateId !== templateWithSource.id) {
             navigate(`/templates/${templateWithSource.id}`, { replace: true });
         } else if (templateWithSource.source === 'predefined' && urlTemplateId) {
@@ -171,7 +181,7 @@ function Templates() {
     };
 
     const handleDelete = async () => {
-        if (!selectedTemplate || selectedTemplate.source === 'predefined') return;
+        if (!selectedTemplate || selectedTemplate.source === 'predefined' || selectedTemplate.isBuiltIn) return;
         if (!confirm(`Esti sigur ca vrei sa stergi template-ul "${selectedTemplate.name}"?`)) return;
         try {
             await api.delete(`/templates/${selectedTemplate.id}`);
@@ -199,15 +209,15 @@ function Templates() {
 
     return (
         <div className="templates-page" style={{ display: 'flex', gap: '1.5rem', height: 'calc(100vh - 180px)' }}>
-            {/* Left Panel - Template List */}
+            {/* Panou Stanga - Lista */}
             <div style={{ width: '400px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {/* Header */}
+                {/* Antet */}
                 <div>
                     <h1 className="page-title">Template-uri Audit</h1>
                     <p className="page-subtitle">Gestioneaza si versioneaza standardele de audit.</p>
                 </div>
 
-                {/* Action Buttons */}
+                {/* Butoane Actiune */}
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button className="btn btn-secondary" onClick={() => setShowImportModal(true)}>
                         <span className="material-symbols-outlined">upload_file</span>
@@ -219,7 +229,7 @@ function Templates() {
                     </button>
                 </div>
 
-                {/* Search */}
+                {/* Cautare */}
                 <div className="search-box">
                     <span className="material-symbols-outlined">search</span>
                     <input
@@ -232,7 +242,7 @@ function Templates() {
                     />
                 </div>
 
-                {/* Filter Tabs */}
+                {/* Taburi Filtrare */}
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {[
                         { key: 'all', label: 'Toate' },
@@ -250,7 +260,7 @@ function Templates() {
                     ))}
                 </div>
 
-                {/* Template List */}
+                {/* Lista Template-uri */}
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {loading ? (
                         <div className="empty-state" style={{ padding: '2rem' }}>
@@ -283,7 +293,7 @@ function Templates() {
                                         )}
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.25rem' }}>
-                                        {template.source === 'predefined' && (
+                                        {(template.source === 'predefined' || template.isBuiltIn) && (
                                             <span className="badge badge-info">Predefinit</span>
                                         )}
                                         {template.source === 'saved' && (
@@ -313,32 +323,32 @@ function Templates() {
                 </div>
             </div>
 
-            {/* Right Panel - Template Detail */}
+            {/* Panou Dreapta - Detalii */}
             <div style={{ flex: 1, minWidth: 0 }}>
                 {selectedTemplate ? (
                     <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        {/* Detail Header */}
+                        {/* Antet Detalii */}
                         <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-light)', background: 'var(--bg-light)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <div style={{ display: 'flex', gap: '1rem' }}>
                                     <div style={{
                                         width: '48px',
                                         height: '48px',
-                                        background: selectedTemplate.source === 'predefined' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                                        background: (selectedTemplate.source === 'predefined' || selectedTemplate.isBuiltIn) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
                                         borderRadius: 'var(--radius-lg)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        color: selectedTemplate.source === 'predefined' ? 'var(--success)' : 'var(--info)'
+                                        color: (selectedTemplate.source === 'predefined' || selectedTemplate.isBuiltIn) ? 'var(--success)' : 'var(--info)'
                                     }}>
                                         <span className="material-symbols-outlined">
-                                            {selectedTemplate.source === 'predefined' ? 'verified' : 'shield'}
+                                            {(selectedTemplate.source === 'predefined' || selectedTemplate.isBuiltIn) ? 'verified' : 'shield'}
                                         </span>
                                     </div>
                                     <div>
                                         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                             {selectedTemplate.name}
-                                            {selectedTemplate.source === 'predefined' && (
+                                            {(selectedTemplate.source === 'predefined' || selectedTemplate.isBuiltIn) && (
                                                 <span className="badge badge-info">Predefinit</span>
                                             )}
                                             {selectedTemplate.source === 'saved' && (
@@ -359,7 +369,7 @@ function Templates() {
                                             Publica
                                         </button>
                                     )}
-                                    {selectedTemplate.source === 'saved' && (
+                                    {selectedTemplate.source === 'saved' && (isAdmin || !selectedTemplate.isBuiltIn) && (
                                         <button className="btn btn-secondary btn-sm" onClick={() => setShowEditModal(true)}>
                                             <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>edit</span>
                                             Editeaza
@@ -411,7 +421,7 @@ function Templates() {
                             </div>
                         </div>
 
-                        {/* Controls List */}
+                        {/* Lista Controale */}
                         <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
                             <h3 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '1rem' }}>
                                 Controale ({selectedTemplateControls.length})
@@ -705,7 +715,16 @@ function ImportTemplateModal({ predefinedTemplates, onClose, onSuccess }) {
             if (err instanceof SyntaxError) {
                 setError('JSON invalid');
             } else {
-                setError(err.response?.data?.message || 'Eroare la import');
+                // Erori validare comenzi — afisare detaliata
+                const cmdErrors = err.response?.data?.commandErrors;
+                if (cmdErrors && cmdErrors.length > 0) {
+                    const details = cmdErrors.map(e =>
+                        `[${e.controlId}/${e.checkId}] ${e.command} — ${e.reasons.join(', ')}`
+                    ).join('\n');
+                    setError(`Comenzi interzise detectate:\n${details}`);
+                } else {
+                    setError(err.response?.data?.message || 'Eroare la import');
+                }
             }
         } finally {
             setLoading(false);
@@ -723,7 +742,7 @@ function ImportTemplateModal({ predefinedTemplates, onClose, onSuccess }) {
                     {error && (
                         <div className="alert alert-error mb-md">
                             <span className="material-symbols-outlined">error</span>
-                            {error}
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 'inherit' }}>{error}</pre>
                         </div>
                     )}
 
@@ -792,7 +811,7 @@ function AddControlModal({ show, onClose, onAdd, predefinedTemplates }) {
     const [filters, setFilters] = useState({ severity: 'ALL', standard: 'ALL', os: 'ALL' });
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Preluare controale catalog cand tab-ul este activ
+    // Preluare controale catalog
     useEffect(() => {
         if (activeTab === 'catalog' && predefinedTemplates.length > 0 && catalogControls.length === 0) {
             const fetchCatalog = async () => {
@@ -1207,7 +1226,16 @@ function EditTemplateModal({ template, controls, onClose, onSuccess, predefinedT
             await api.put(`/templates/${template.id}/controls`, { controls: controlsToSave });
             onSuccess();
         } catch (err) {
-            setError(err.response?.data?.message || 'Eroare la salvare');
+            // Erori validare comenzi — afisare detaliata
+            const cmdErrors = err.response?.data?.commandErrors;
+            if (cmdErrors && cmdErrors.length > 0) {
+                const details = cmdErrors.map(e =>
+                    `[${e.controlId}/${e.checkId}] ${e.command} — ${e.reasons.join(', ')}`
+                ).join('\n');
+                setError(`Comenzi interzise detectate:\n${details}`);
+            } else {
+                setError(err.response?.data?.message || 'Eroare la salvare');
+            }
         } finally {
             setLoading(false);
         }

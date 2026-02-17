@@ -35,7 +35,7 @@ model Role {
   id          String   @id @default(uuid())
   name        String   @unique // ADMIN, AUDITOR, VIEWER
   description String?
-  permissions String[] // lista capabilitati globale
+  permissions String[] // capabilitati globale
   users       User[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -67,6 +67,7 @@ model Server {
   ipAddress          String?
   description        String?
   status             ServerStatus        @default(PENDING)
+  riskLevel          String?             // critical, high, medium, low
   agentIdentity      AgentIdentity?
   permissions        Permission[]
   inventorySnapshots InventorySnapshot[]
@@ -79,16 +80,18 @@ model Server {
 }
 
 model AgentIdentity {
-  id          String    @id @default(uuid())
-  serverId    String    @unique
-  server      Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  enrollToken String?   @unique
-  agentToken  String?   @unique // token pentru comunicare continua
-  version     String?
-  osInfo      String?
-  lastSeen    DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  serverId          String    @unique
+  server            Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  enrollToken       String?   @unique
+  agentToken        String?   @unique // hash SHA-256 al token-ului
+  version           String?
+  osInfo            String?
+  publicKey         String?   // certificat PEM agent (sursa cheii publice)
+  certificateSerial String?   // serial certificat emis
+  lastSeen          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@map("agent_identities")
 }
@@ -99,8 +102,8 @@ model Permission {
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   serverId     String
   server       Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  capabilities String[] // vizualizare, rulare audit, generare raport, acces ssh
-  expiresAt    DateTime? // pentru JIT access
+  capabilities String[] // vizualizare, rulare audit, etc
+  expiresAt    DateTime? // pentru acces JIT
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -163,15 +166,15 @@ model AutomatedCheck {
   checkId        String
   title          String
   description    String?
-  command        String? // comanda de executare pe agent
+  command        String? // comanda executie agent
   script         String? // script mai complex
   expectedResult String?
   checkType      String? // COMMAND, SCRIPT, FILE_CHECK, etc
   comparison     String?   @default("EQUALS") // EQUALS, CONTAINS, REGEX, NUM_EQ, NUM_GE, NUM_LE, EXIT_CODE
   parser         String?   @default("RAW") // RAW, INT, JSON, FIRST_LINE
-  normalize      Json?     // Array de string-uri ["TRIM", "LOWER", "SQUASH_WS"]
+  normalize      Json?     // Array string-uri (ex: "TRIM")
   onFailMessage  String?
-  platformScope  Json?     // Array de string-uri ["ubuntu", "debian"]
+  platformScope  Json?     // Array string-uri (ex: "ubuntu")
   checkResults   CheckResult[]
 
   @@unique([controlId, checkId])
@@ -242,6 +245,14 @@ model CheckResult {
   output           String?
   errorMessage     String?
   executedAt       DateTime       @default(now())
+  // Chain of Custody
+  outputHash       String?        // SHA-256 al output-ului
+  execTimestamp    DateTime?      // momentul exact executie pe agent
+  execHostname     String?        // hostname masina unde s-a executat
+  execUser         String?        // userul care a executat comanda
+  exitCode         Int?           // exit code comanda
+  signature        String?        // semnatura digitala agent
+  verified         Boolean        @default(false) // verificare semnatura reusita
 
   @@unique([auditRunId, automatedCheckId])
   @@map("check_results")
@@ -295,7 +306,7 @@ model InventorySnapshot {
   services  Json? // lista servicii
   ports     Json? // porturi deschise
   processes Json? // procese active
-  sshConfig Json? // configurare SSH efectiva
+  sshConfig Json? // config SSH
   sysctl    Json? // valori sysctl
   firewall  Json? // reguli firewall
   users     Json? // useri sistem
@@ -381,6 +392,13 @@ enum ServerStatus {
 enum TemplateType {
   CIS_BENCHMARK
   CIS_CONTROLS
+  NIS2
+  NIST
+  MITRE
+  SUPPLY_CHAIN
+  ISO27001
+  GDPR
+  PCI_DSS
   CUSTOM
 }
 

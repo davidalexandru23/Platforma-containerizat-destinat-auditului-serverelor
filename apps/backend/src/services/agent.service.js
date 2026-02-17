@@ -1,8 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { UnauthorizedError, BadRequestError } from '../middleware/error.middleware.js';
 import { log } from '../lib/logger.js';
 import * as notificationService from './notification.service.js';
+import * as pkiService from './pki.service.js';
 import EventEmitter from 'events';
 
 // WebSocket - setat din main.js
@@ -22,7 +24,7 @@ const ALERT_THRESHOLDS = {
 // Cache pentru modul delta
 const metricsCache = new Map();
 
-// Cache pt comenzi ad-hoc (Test Check)
+// Cache pentru comenzi ad-hoc
 const adhocQueue = new Map(); // serverId -> [ { id, command, resolve, ... } ]
 const adhocResults = new EventEmitter(); // Event bus internal
 
@@ -34,7 +36,7 @@ const adhocResults = new EventEmitter(); // Event bus internal
  * @param {Object} data - Datele trimise de agent (token, osInfo, version)
  */
 async function enroll(data) {
-    const { enrollToken, version, osInfo } = data;
+    const { enrollToken, version, osInfo, csr } = data;
 
     // Cautare identitate agent cu token
     const agentIdentity = await prisma.agentIdentity.findUnique({
@@ -46,18 +48,54 @@ async function enroll(data) {
         throw new UnauthorizedError('Token enrollment invalid');
     }
 
-    // Generare token permanent agent
-    const agentToken = uuidv4();
+    // Verificare expirare token enrollment (24h de la generare)
+    const tokenAge = Date.now() - new Date(agentIdentity.updatedAt).getTime();
+    const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h
+    if (tokenAge > TOKEN_EXPIRY_MS) {
+        throw new UnauthorizedError('Token enrollment expirat (valabil 24h)');
+    }
 
-    // actualizeaza agent identity
+    // Generare token permanent agent (hash SHA-256 inainte de stocare)
+    const agentToken = uuidv4();
+    const agentTokenHash = crypto.createHash('sha256').update(agentToken).digest('hex');
+
+    // PKI: semnare CSR daca exista
+    let certificate = null;
+    let certificateSerial = null;
+    let caCert = null;
+    let backendPublicKey = null;
+    let publicKey = null;
+
+    if (csr) {
+        try {
+            // validam identitatea pe baza token-ului, deci semnam CSR-ul
+            // cn-ul e setat la serverId
+            const pkiResult = pkiService.signCSR(csr, agentIdentity.serverId);
+            certificate = pkiResult.cert;
+            certificateSerial = pkiResult.serial;
+            caCert = pkiResult.caCert;
+            backendPublicKey = pkiResult.backendPublicKey;
+
+            // in viitor am putea salva cheia publica din csr pentru verificare
+            // momentan ne bazam pe pkiService si certificat
+        } catch (err) {
+            log.error(`PKI Error for server ${agentIdentity.serverId}:`, err);
+            // eroare critica daca pki esueaza
+            throw new BadRequestError('CSR invalid or PKI error');
+        }
+    }
+
+    // actualizare identitate agent
     await prisma.agentIdentity.update({
         where: { id: agentIdentity.id },
         data: {
-            agentToken,
+            agentToken: agentTokenHash,
             enrollToken: null,
             version,
             osInfo,
             lastSeen: new Date(),
+            certificateSerial,
+            publicKey: certificate, // salvam certificatul ca sursa pentru cheia publica
         },
     });
 
@@ -74,7 +112,12 @@ async function enroll(data) {
         serverId: agentIdentity.serverId,
         serverName: agentIdentity.server.name,
         message: 'Agent inrolat cu succes',
+        // PKI Metadata
+        certificate,
+        caCert,
+        backendPublicKey
     };
+
 }
 
 /**
@@ -105,16 +148,17 @@ async function submitMetrics(serverId, data, agentToken, ipAddress) {
 
     const now = new Date();
 
-    // update lastSeen si status
+    // Actualizare lastSeen si status
     await prisma.agentIdentity.update({
         where: { serverId },
         data: { lastSeen: now },
     });
 
-    // Curatare IP (eliminare prefix ::ffff:)
-    const cleanIp = ipAddress ? ipAddress.replace(/^::ffff:/, '') : null;
+    // Preferinta IP raportat de agent (evita NAT Docker), fallback la IP conexiune
+    const rawIp = data.reportedIP || ipAddress;
+    const cleanIp = rawIp ? rawIp.replace(/^::ffff:/, '') : null;
 
-    // Check previous status for activity feed
+    // Verificare status anterior pentru flux activitate
     const previousServer = await prisma.server.findUnique({
         where: { id: serverId },
         select: { status: true, hostname: true }
@@ -128,7 +172,7 @@ async function submitMetrics(serverId, data, agentToken, ipAddress) {
         },
     });
 
-    // Broadcast activity if server just came online
+    // difuzare activitate daca serverul devine online
     if (previousServer && previousServer.status !== 'ONLINE') {
         notificationService.broadcastActivity(
             'System',
@@ -138,15 +182,15 @@ async function submitMetrics(serverId, data, agentToken, ipAddress) {
         );
     }
 
-    // Calculate latency
+    // calculare latenta
     const latencyMs = Date.now() - requestStart;
 
-    // === DIFUZARI WEBSOCKET ===
+    // === difuzari websocket ===
     if (io) {
-        // 1. Heartbeat
+        // 1. heartbeat
         notificationService.broadcastHeartbeat(serverId, agentIdentity.version, latencyMs);
 
-        // 2. Mod Delta: doar daca valorile s-au schimbat semnificativ
+        // 2. mod delta: doar daca valorile s-au schimbat semnificativ
         const lastMetrics = metricsCache.get(serverId);
         const currentMetrics = {
             cpu: data.cpuPercent,
@@ -186,7 +230,7 @@ async function submitMetrics(serverId, data, agentToken, ipAddress) {
             metricsCache.set(serverId, currentMetrics);
         }
 
-        // 3. Alerts - check thresholds
+        // 3. alerte - verificare praguri
         const alerts = [];
         if (data.cpuPercent >= ALERT_THRESHOLDS.CPU_HIGH) {
             alerts.push({ type: 'CPU_HIGH', message: `CPU la ${data.cpuPercent.toFixed(1)}%`, severity: 'critical' });
@@ -210,7 +254,7 @@ async function submitMetrics(serverId, data, agentToken, ipAddress) {
             notificationService.broadcastServerAlert(serverId, alert.type, alert.message, alert.severity);
         }
 
-        // 4. Server status update (pentru lista de servere)
+        // 4. status server (pentru lista de servere)
         notificationService.broadcastServerStatus(serverId, 'ONLINE', now, server.riskLevel);
     }
 
@@ -250,7 +294,7 @@ async function submitInventory(serverId, data, agentToken) {
  */
 async function submitCheckResults(serverId, auditRunId, data, agentToken) {
     try {
-        await verifyAgentToken(serverId, agentToken);
+        const agentIdentity = await verifyAgentToken(serverId, agentToken);
 
         // --- GESTIONARE REZULTATE AD-HOC ---
         if (auditRunId === 'ADHOC') {
@@ -288,6 +332,20 @@ async function submitCheckResults(serverId, auditRunId, data, agentToken) {
             let status = result.status;
             if (status === 'SKIPPED') status = 'NA';
 
+            // verificare semnatura
+            let verified = false;
+            if (result.signature && agentIdentity.publicKey) {
+                // verificam semnatura pe payload (outputHash + exitCode + etc)
+                // protocol sincronizat cu agentul
+                const payloadToVerify = `${result.outputHash}${result.status}${result.execTimestamp}`;
+                verified = pkiService.verifyAgentSignature(payloadToVerify, result.signature, agentIdentity.publicKey);
+                if (!verified) {
+                    console.warn(`[SECURITY] Signature verification failed for check ${result.automatedCheckId} on server ${serverId}`);
+                    status = 'ERROR';
+                    result.errorMessage = 'Semnatura invalida — rezultat neacceptat';
+                }
+            }
+
             try {
                 await prisma.checkResult.upsert({
                     where: {
@@ -301,22 +359,39 @@ async function submitCheckResults(serverId, auditRunId, data, agentToken) {
                         automatedCheckId: result.automatedCheckId,
                         status: status,
                         output: result.output,
+                        outputHash: result.outputHash,
                         errorMessage: result.errorMessage,
+                        // lant de custodie
+                        execTimestamp: result.execTimestamp ? new Date(result.execTimestamp) : new Date(),
+                        execHostname: result.execHostname,
+                        execUser: result.execUser,
+                        exitCode: result.exitCode,
+                        signature: result.signature,
+                        verified: verified
                     },
                     update: {
                         status: status,
                         output: result.output,
+                        outputHash: result.outputHash,
                         errorMessage: result.errorMessage,
+                        // Chain of Custody
+                        execTimestamp: result.execTimestamp ? new Date(result.execTimestamp) : new Date(),
+                        execHostname: result.execHostname,
+                        execUser: result.execUser,
+                        exitCode: result.exitCode,
+                        signature: result.signature,
+                        verified: verified
                     },
                 });
 
-                // Notificam frontend-ul de update
+                // Notificare frontend de actualizare
                 if (io) {
                     io.of('/ws/audit').to(`audit:${auditRunId}`).emit('checkResult', {
                         auditRunId,
                         checkId: result.automatedCheckId,
                         status: status,
                         timestamp: new Date().toISOString(),
+                        verified
                     });
                 }
             } catch (err) {
@@ -324,7 +399,7 @@ async function submitCheckResults(serverId, auditRunId, data, agentToken) {
             }
         }
 
-        // Verificare daca auditul s-a incheiat
+        // verificam daca auditul s-a terminat
         try {
             const count = await prisma.checkResult.count({
                 where: { auditRunId }
@@ -344,7 +419,7 @@ async function submitCheckResults(serverId, auditRunId, data, agentToken) {
             console.error(`Failed to trigger completion for audit ${auditRunId}:`, err);
         }
 
-        return { message: 'Rezultate salvate' };
+        return { message: 'rezultate salvate' };
     } catch (error) {
         console.error('Critical error in submitCheckResults:', error);
         throw error;
@@ -382,25 +457,30 @@ async function getPendingAuditChecks(serverId, agentToken) {
             .flatMap(control =>
                 control.automatedChecks
                     .filter(check => !completedCheckIds.has(check.id))
-                    .map(check => ({
-                        auditRunId: run.id,
-                        automatedCheckId: check.id,
-                        checkId: check.checkId,
-                        title: check.title,
-                        command: check.command,
-                        script: check.script,
-                        expectedResult: check.expectedResult,
-                        checkType: check.checkType || 'COMMAND',
-                        comparison: check.comparison,
-                        parser: check.parser,
-                        normalize: check.normalize,
-                        onFailMessage: check.onFailMessage,
-                        platformScope: check.platformScope
-                    }))
+                    .map(check => {
+                        // Semnare: command + checkId (sincronizat cu agentul)
+                        const signature = pkiService.signCommand((check.command || '') + check.checkId);
+                        return {
+                            auditRunId: run.id,
+                            automatedCheckId: check.id,
+                            checkId: check.checkId,
+                            title: check.title,
+                            command: check.command,
+                            signature: signature, // Send signature
+                            script: check.script,
+                            expectedResult: check.expectedResult,
+                            checkType: check.checkType || 'COMMAND',
+                            comparison: check.comparison,
+                            parser: check.parser,
+                            normalize: check.normalize,
+                            onFailMessage: check.onFailMessage,
+                            platformScope: check.platformScope
+                        };
+                    })
             );
     });
 
-    // 2. INJECTIE VERIFICARI AD-HOC
+    // 2. injectie verificari ad-hoc
     const adhocChecks = adhocQueue.get(serverId) || [];
     const mappedAdhoc = adhocChecks.map(c => ({
         auditRunId: 'ADHOC',
@@ -420,7 +500,7 @@ async function getPendingAuditChecks(serverId, agentToken) {
 
     if (mappedAdhoc.length > 0) {
         console.log(`Injecting ${mappedAdhoc.length} adhoc checks for server ${serverId}`);
-        // Clear queue effectively "consuming" them
+        // curatam coada
         adhocQueue.set(serverId, []);
     }
 
@@ -428,29 +508,37 @@ async function getPendingAuditChecks(serverId, agentToken) {
 }
 
 /**
- * Adaugare la coada comanda ad-hoc si asteptare rezultat
+ * adaugare in coada comanda ad-hoc
  */
 async function runAdhocCheck(serverId, checkData) {
+    // validare comanda
+    const { validateCommand } = await import('./commandValidator.service.js');
+    const cmdResult = validateCommand(checkData.command);
+    if (!cmdResult.allowed) {
+        throw new Error(`Comanda interzisa: ${cmdResult.reasons.join(', ')}`);
+    }
+
     return new Promise((resolve, reject) => {
         const checkId = uuidv4();
 
-        // Timeout 30s
+        // timeout 30s
         const timeout = setTimeout(() => {
             adhocResults.removeAllListeners(checkId);
             reject(new Error('Timeout waiting for agent response'));
         }, 30000);
 
-        // Listen for result
+        // ascultare rezultat
         adhocResults.once(checkId, (result) => {
             clearTimeout(timeout);
             resolve(result);
         });
 
-        // Add to queue
+        // adaugare in coada
         const queue = adhocQueue.get(serverId) || [];
         queue.push({
             id: checkId,
-            ...checkData
+            ...checkData,
+            signature: pkiService.signCommand((checkData.command || '') + checkId) // sincronizat cu agentul
         });
         adhocQueue.set(serverId, queue);
 
@@ -463,8 +551,11 @@ async function verifyAgentToken(serverId, agentToken) {
         throw new UnauthorizedError('Agent token lipsa');
     }
 
+    // Hash token primit si compara cu cel stocat
+    const agentTokenHash = crypto.createHash('sha256').update(agentToken).digest('hex');
+
     const agentIdentity = await prisma.agentIdentity.findFirst({
-        where: { serverId, agentToken },
+        where: { serverId, agentToken: agentTokenHash },
     });
 
     if (!agentIdentity) {

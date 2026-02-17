@@ -3,8 +3,8 @@
     "metadata": {
         "name": "NIST SP 800-53 Rev.5 (Moderate) - Linux Server Automated Audit Pack",
         "description": "Template de audit aliniat la NIST SP 800-53 Rev.5 (nivel Moderate), adaptat pentru servere Linux. Include controale tehnice si operationale, cu verificari automatizabile prin agent acolo unde este posibil (read-only).",
-        "version": "1.0.0",
-        "type": "CUSTOM",
+        "version": "1.1.0",
+        "type": "NIST",
         "author": "BitTrail Platform",
         "createdAt": "2026-01-27T00:00:00Z"
     },
@@ -18,20 +18,26 @@
             "automatedChecks": [
                 {
                     "checkId": "AC-2.a",
-                    "title": "passwd_inventory",
-                    "command": "cut -d: -f1,3,6,7 /etc/passwd | sed -n '1,220p'",
+                    "title": "Inventar conturi locale",
+                    "command": "TOTAL=$(wc -l < /etc/passwd); INTERACTIVE=$(grep -cE '/bin/(bash|sh|zsh|fish)$' /etc/passwd); NOLOGIN=$((TOTAL - INTERACTIVE)); echo \"TOTAL_ACCOUNTS=$TOTAL\"; echo \"INTERACTIVE=$INTERACTIVE\"; echo \"NOLOGIN=$NOLOGIN\"; cut -d: -f1,3,7 /etc/passwd | head -n 50; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AC-2.b",
-                    "title": "locked_accounts",
-                    "command": "awk -F: '($2 ~ /^!|^\\*/){print $1\":\"$2}' /etc/shadow 2>/dev/null | sed -n '1,220p' || true",
+                    "title": "Conturi fara parola valida",
+                    "command": "EMPTY=$(awk -F: '($2 == \"\") {print $1}' /etc/shadow 2>/dev/null | wc -l); echo \"EMPTY_PASSWORD=$EMPTY\"; if [ \"$EMPTY\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; awk -F: '($2 == \"\") {print $1}' /etc/shadow 2>/dev/null; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AC-2.c",
-                    "title": "lastlog_summary",
-                    "command": "lastlog 2>/dev/null | sed -n '1,220p' || true",
+                    "title": "Conturi UID 0",
+                    "command": "ROOT_ACCTS=$(awk -F: '$3 == 0 {print $1}' /etc/passwd | wc -l); echo \"UID0_ACCOUNTS=$ROOT_ACCTS\"; awk -F: '$3 == 0 {print $1}' /etc/passwd; if [ \"$ROOT_ACCTS\" -le 1 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -56,14 +62,18 @@
             "automatedChecks": [
                 {
                     "checkId": "AC-3.a",
-                    "title": "critical_perms",
-                    "command": "for f in /etc/shadow /etc/gshadow /etc/sudoers /etc/ssh/sshd_config; do [ -f \"$f\" ] && stat -c '%n %U:%G %a' \"$f\"; done 2>/dev/null || true",
+                    "title": "Permisii fisiere critice",
+                    "command": "SCORE=0; TOTAL=0; for f in /etc/shadow /etc/gshadow /etc/sudoers /etc/ssh/sshd_config; do if [ -f \"$f\" ]; then TOTAL=$((TOTAL+1)); PERM=$(stat -c '%a' \"$f\" 2>/dev/null); OWNER=$(stat -c '%U' \"$f\" 2>/dev/null); echo \"$f owner=$OWNER perm=$PERM\"; if [ \"$OWNER\" = 'root' ]; then SCORE=$((SCORE+1)); fi; fi; done; echo \"CORRECT=$SCORE/$TOTAL\"; if [ \"$SCORE\" -eq \"$TOTAL\" ] && [ \"$TOTAL\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AC-3.b",
-                    "title": "world_writable_files",
-                    "command": "find / -xdev -type f -perm -0002 2>/dev/null | head -n 200 || true",
+                    "title": "Fisiere world-writable",
+                    "command": "COUNT=$(find / -xdev -type f -perm -0002 -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | wc -l); echo \"WORLD_WRITABLE_FILES=$COUNT\"; if [ \"$COUNT\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; find / -xdev -type f -perm -0002 -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -n 20; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -78,14 +88,18 @@
             "automatedChecks": [
                 {
                     "checkId": "AC-6.a",
-                    "title": "sudoers_and_dropins",
-                    "command": "cat /etc/sudoers 2>/dev/null || true; ls -la /etc/sudoers.d 2>/dev/null || true; for f in /etc/sudoers.d/*; do [ -f \"$f\" ] && { echo \"--- $f\"; cat \"$f\"; }; done 2>/dev/null || true",
+                    "title": "NOPASSWD entries",
+                    "command": "NOPASSWD=$(grep -rn 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -cv '^#'); echo \"NOPASSWD_ENTRIES=$NOPASSWD\"; if [ \"$NOPASSWD\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; grep -rn 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -v '^#'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AC-6.b",
-                    "title": "nopasswd_search",
-                    "command": "grep -R \"NOPASSWD\" -n /etc/sudoers /etc/sudoers.d 2>/dev/null || true",
+                    "title": "Sudo group size",
+                    "command": "TOTAL=$(getent group sudo wheel 2>/dev/null | cut -d: -f4 | tr ',' '\\n' | sort -u | grep -c '.'); echo \"ADMIN_USERS=$TOTAL\"; if [ \"$TOTAL\" -le 5 ]; then echo 'CHECK=PASS'; else echo 'CHECK=EXCESSIVE'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -110,14 +124,18 @@
             "automatedChecks": [
                 {
                     "checkId": "AC-7.a",
-                    "title": "faillock_conf",
-                    "command": "cat /etc/security/faillock.conf 2>/dev/null || true; grep -R \"pam_faillock\" -n /etc/pam.d 2>/dev/null || true",
+                    "title": "Faillock configurare",
+                    "command": "if [ -f /etc/security/faillock.conf ]; then echo 'FAILLOCK=CONFIGURED'; grep -v '^#' /etc/security/faillock.conf 2>/dev/null | grep -v '^$' | head -n 10; elif grep -q 'pam_faillock\\|pam_tally2' /etc/pam.d/* 2>/dev/null; then echo 'FAILLOCK=PAM_CONFIGURED'; else echo 'FAILLOCK=MISSING'; fi",
+                    "expectedResult": "CONFIGURED",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AC-7.b",
-                    "title": "fail2ban_status",
-                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status; fail2ban-client status sshd 2>/dev/null || true; else echo \"SKIP_FAIL2BAN\"; fi",
+                    "title": "Fail2Ban status",
+                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then echo 'FAIL2BAN=ACTIVE'; fail2ban-client status 2>/dev/null | head -n 5; echo 'CHECK=PASS'; else echo 'FAIL2BAN=NOT_INSTALLED'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -132,14 +150,18 @@
             "automatedChecks": [
                 {
                     "checkId": "AC-17.a",
-                    "title": "sshd_effective",
-                    "command": "sshd -T 2>/dev/null | sed -n '1,220p' || (cat /etc/ssh/sshd_config 2>/dev/null || true)",
+                    "title": "SSH PermitRootLogin",
+                    "command": "VALUE=$(sshd -T 2>/dev/null | grep -i 'permitrootlogin' | awk '{print $2}'); if [ -z \"$VALUE\" ]; then VALUE=$(grep -i '^PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}'); fi; echo \"PermitRootLogin=$VALUE\"; if echo \"$VALUE\" | grep -qiE '^(no|prohibit-password)$'; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AC-17.b",
-                    "title": "ssh_keys_inventory",
-                    "command": "for d in /home/* /root; do [ -d \"$d/.ssh\" ] && { echo \"== $d ==\"; ls -la \"$d/.ssh\"; [ -f \"$d/.ssh/authorized_keys\" ] && sed -n '1,200p' \"$d/.ssh/authorized_keys\"; }; done 2>/dev/null || true",
+                    "title": "SSH Keys inventory",
+                    "command": "KEYS=0; for d in /home/* /root; do if [ -f \"$d/.ssh/authorized_keys\" ]; then COUNT=$(wc -l < \"$d/.ssh/authorized_keys\" 2>/dev/null); KEYS=$((KEYS+COUNT)); echo \"$(basename $d): $COUNT keys\"; fi; done 2>/dev/null; echo \"TOTAL_SSH_KEYS=$KEYS\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -154,14 +176,18 @@
             "automatedChecks": [
                 {
                     "checkId": "IA-2.a",
-                    "title": "pam_stack",
-                    "command": "ls -la /etc/pam.d 2>/dev/null || true; sed -n '1,200p' /etc/pam.d/sshd 2>/dev/null || true",
+                    "title": "PAM SSH config",
+                    "command": "if [ -f /etc/pam.d/sshd ]; then echo 'PAM_SSH=CONFIGURED'; grep -v '^#' /etc/pam.d/sshd 2>/dev/null | grep -v '^$' | head -n 15; echo 'CHECK=PASS'; else echo 'PAM_SSH=MISSING'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "IA-2.b",
-                    "title": "mfa_modules_presence",
-                    "command": "ls -la /lib*/security 2>/dev/null | grep -E 'google_authenticator|oath|yubico|pam_u2f' || true",
+                    "title": "MFA modules presence",
+                    "command": "FOUND=''; ls /lib*/security/*google_authenticator* 2>/dev/null && FOUND=\"$FOUND google-auth\"; ls /lib*/security/*oath* 2>/dev/null && FOUND=\"$FOUND oath\"; ls /lib*/security/*yubico* 2>/dev/null && FOUND=\"$FOUND yubico\"; ls /lib*/security/*pam_u2f* 2>/dev/null && FOUND=\"$FOUND u2f\"; if [ -n \"$FOUND\" ]; then echo \"MFA_MODULES=$FOUND\"; echo 'CHECK=PASS'; else echo 'MFA_MODULES=NONE'; echo 'CHECK=INFO'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -186,14 +212,18 @@
             "automatedChecks": [
                 {
                     "checkId": "IA-5.a",
-                    "title": "login_defs",
-                    "command": "cat /etc/login.defs 2>/dev/null | sed -n '1,220p' || true",
+                    "title": "Password aging config",
+                    "command": "PASS_MAX=$(grep '^PASS_MAX_DAYS' /etc/login.defs 2>/dev/null | awk '{print $2}'); PASS_MIN=$(grep '^PASS_MIN_DAYS' /etc/login.defs 2>/dev/null | awk '{print $2}'); PASS_WARN=$(grep '^PASS_WARN_AGE' /etc/login.defs 2>/dev/null | awk '{print $2}'); echo \"PASS_MAX_DAYS=$PASS_MAX\"; echo \"PASS_MIN_DAYS=$PASS_MIN\"; echo \"PASS_WARN_AGE=$PASS_WARN\"; if [ -n \"$PASS_MAX\" ] && [ \"$PASS_MAX\" -le 365 ] 2>/dev/null; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "PASS_MAX_DAYS=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "IA-5.b",
-                    "title": "pwquality",
-                    "command": "cat /etc/security/pwquality.conf 2>/dev/null || true; grep -R \"pam_pwquality\\|pam_cracklib\" -n /etc/pam.d 2>/dev/null || true",
+                    "title": "Password quality config",
+                    "command": "if [ -f /etc/security/pwquality.conf ]; then echo 'PWQUALITY=CONFIGURED'; grep -v '^#' /etc/security/pwquality.conf 2>/dev/null | grep -v '^$' | head -n 15; echo 'CHECK=PASS'; elif grep -q 'pam_pwquality\\|pam_cracklib' /etc/pam.d/* 2>/dev/null; then echo 'PWQUALITY=PAM_CONFIGURED'; echo 'CHECK=PASS'; else echo 'PWQUALITY=MISSING'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -208,14 +238,18 @@
             "automatedChecks": [
                 {
                     "checkId": "AU-2.a",
-                    "title": "journald_disk",
-                    "command": "journalctl --disk-usage 2>/dev/null || true; cat /etc/systemd/journald.conf 2>/dev/null || true",
+                    "title": "Journald activ",
+                    "command": "if systemctl is-active systemd-journald >/dev/null 2>&1; then echo 'JOURNALD=ACTIVE'; journalctl --disk-usage 2>/dev/null; echo 'CHECK=PASS'; else echo 'JOURNALD=INACTIVE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AU-2.b",
-                    "title": "rsyslog_conf",
-                    "command": "systemctl status rsyslog --no-pager 2>/dev/null || true; ls -la /etc/rsyslog.d 2>/dev/null || true",
+                    "title": "Auditd activ",
+                    "command": "if systemctl is-active auditd >/dev/null 2>&1; then echo 'AUDITD=ACTIVE'; RULES=$(auditctl -l 2>/dev/null | wc -l); echo \"AUDIT_RULES=$RULES\"; echo 'CHECK=PASS'; else echo 'AUDITD=INACTIVE'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -240,14 +274,18 @@
             "automatedChecks": [
                 {
                     "checkId": "AU-6.a",
-                    "title": "auth_failures",
-                    "command": "journalctl -u ssh --no-pager -n 200 2>/dev/null || true; journalctl --no-pager -n 200 | grep -iE 'failed password|authentication failure' | head -n 200 || true",
+                    "title": "Auth failures recente",
+                    "command": "FAILURES=$(journalctl --no-pager -n 500 2>/dev/null | grep -ciE 'failed password|authentication failure'); echo \"AUTH_FAILURES_RECENT=$FAILURES\"; if [ \"$FAILURES\" -le 50 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "AU-6.b",
-                    "title": "logrotate",
-                    "command": "cat /etc/logrotate.conf 2>/dev/null || true; ls -la /etc/logrotate.d 2>/dev/null || true",
+                    "title": "Logrotate configurat",
+                    "command": "if [ -f /etc/logrotate.conf ]; then echo 'LOGROTATE=CONFIGURED'; grep -cE 'rotate|weekly|daily|monthly' /etc/logrotate.conf 2>/dev/null; echo 'CHECK=PASS'; else echo 'LOGROTATE=MISSING'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -272,8 +310,10 @@
             "automatedChecks": [
                 {
                     "checkId": "AU-9.a",
-                    "title": "log_dir_perms",
-                    "command": "stat -c '%n %U:%G %a' /var/log 2>/dev/null || true; find /var/log -maxdepth 1 -type f -printf '%p %u:%g %m\\n' 2>/dev/null | head -n 200 || true",
+                    "title": "Log directory permissions",
+                    "command": "OWNER=$(stat -c '%U' /var/log 2>/dev/null); PERM=$(stat -c '%a' /var/log 2>/dev/null); echo \"LOG_DIR_OWNER=$OWNER\"; echo \"LOG_DIR_PERM=$PERM\"; if [ \"$OWNER\" = 'root' ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -288,8 +328,10 @@
             "automatedChecks": [
                 {
                     "checkId": "CM-2.a",
-                    "title": "baseline_hashes",
-                    "command": "for f in /etc/ssh/sshd_config /etc/sudoers /etc/sysctl.conf /etc/login.defs /etc/security/pwquality.conf; do [ -f \"$f\" ] && { echo \"== $f ==\"; sha256sum \"$f\"; }; done 2>/dev/null || true",
+                    "title": "Baseline config hashes",
+                    "command": "FOUND=0; for f in /etc/ssh/sshd_config /etc/sudoers /etc/sysctl.conf /etc/login.defs /etc/security/pwquality.conf; do if [ -f \"$f\" ]; then FOUND=$((FOUND+1)); echo \"$(sha256sum \"$f\")\"; fi; done; echo \"HASHED_FILES=$FOUND\"; if [ \"$FOUND\" -ge 3 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -304,8 +346,10 @@
             "automatedChecks": [
                 {
                     "checkId": "CM-6.a",
-                    "title": "sysctl_dump",
-                    "command": "sysctl -a 2>/dev/null | sed -n '1,240p' || true; ls -la /etc/sysctl.d 2>/dev/null || true",
+                    "title": "Sysctl hardening keys",
+                    "command": "SCORE=0; TOTAL=6; sysctl net.ipv4.ip_forward 2>/dev/null | grep -q '= 0' && SCORE=$((SCORE+1)); sysctl net.ipv4.conf.all.accept_redirects 2>/dev/null | grep -q '= 0' && SCORE=$((SCORE+1)); sysctl net.ipv4.conf.all.rp_filter 2>/dev/null | grep -q '= 1' && SCORE=$((SCORE+1)); sysctl net.ipv4.conf.default.accept_source_route 2>/dev/null | grep -q '= 0' && SCORE=$((SCORE+1)); sysctl kernel.randomize_va_space 2>/dev/null | grep -q '= 2' && SCORE=$((SCORE+1)); sysctl net.ipv4.conf.all.send_redirects 2>/dev/null | grep -q '= 0' && SCORE=$((SCORE+1)); echo \"SYSCTL_SCORE=$SCORE/$TOTAL\"; if [ \"$SCORE\" -ge 4 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -320,14 +364,18 @@
             "automatedChecks": [
                 {
                     "checkId": "CM-7.a",
-                    "title": "running_services",
-                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-units --type=service --state=running; else service --status-all 2>/dev/null || true; fi",
+                    "title": "Servicii riscante active",
+                    "command": "RISKY=''; for s in telnet.socket rsh.socket rlogin.socket vsftpd xinetd avahi-daemon cups; do systemctl is-active \"$s\" >/dev/null 2>&1 && RISKY=\"$RISKY $s\"; done; if [ -z \"$RISKY\" ]; then echo 'RISKY_SERVICES=NONE'; echo 'CHECK=PASS'; else echo \"RISKY_SERVICES=$RISKY\"; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "CM-7.b",
-                    "title": "enabled_services",
-                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-unit-files --type=service --state=enabled; fi",
+                    "title": "Running services count",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then COUNT=$(systemctl list-units --type=service --state=running --no-pager | grep -c 'running'); echo \"RUNNING_SERVICES=$COUNT\"; if [ \"$COUNT\" -le 50 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi; else echo 'SYSTEMCTL=NOT_AVAILABLE'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -342,20 +390,26 @@
             "automatedChecks": [
                 {
                     "checkId": "CM-8.a",
-                    "title": "os_release",
-                    "command": "cat /etc/os-release 2>/dev/null || true; uname -a",
+                    "title": "OS si Kernel",
+                    "command": "if [ -f /etc/os-release ]; then . /etc/os-release; echo \"OS=$PRETTY_NAME\"; echo \"ID=$ID\"; fi; echo \"KERNEL=$(uname -r)\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "CM-8.b",
-                    "title": "packages",
-                    "command": "if command -v dpkg >/dev/null 2>&1; then dpkg -l; elif command -v rpm >/dev/null 2>&1; then rpm -qa; else echo \"NO_PKG_MGR\"; fi",
+                    "title": "Package manager available",
+                    "command": "if command -v dpkg >/dev/null 2>&1; then echo 'PKG_MGR=dpkg'; dpkg -l 2>/dev/null | tail -n +6 | wc -l | sed 's/^/PACKAGE_COUNT=/'; elif command -v rpm >/dev/null 2>&1; then echo 'PKG_MGR=rpm'; rpm -qa 2>/dev/null | wc -l | sed 's/^/PACKAGE_COUNT=/'; else echo 'PKG_MGR=NONE'; fi; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "CM-8.c",
-                    "title": "container_inventory",
-                    "command": "if command -v docker >/dev/null 2>&1; then docker ps --format 'table {{.Names}}\\t{{.Image}}\\t{{.Ports}}'; docker images --digests; else echo \"SKIP_DOCKER\"; fi",
+                    "title": "Container runtime inventory",
+                    "command": "if command -v docker >/dev/null 2>&1; then CONTAINERS=$(docker ps -q 2>/dev/null | wc -l); IMAGES=$(docker images -q 2>/dev/null | wc -l); echo \"DOCKER_CONTAINERS=$CONTAINERS\"; echo \"DOCKER_IMAGES=$IMAGES\"; echo 'CHECK=PASS'; else echo 'DOCKER=NOT_INSTALLED'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -370,14 +424,18 @@
             "automatedChecks": [
                 {
                     "checkId": "SC-7.a",
-                    "title": "listening_ports",
-                    "command": "ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null || true",
+                    "title": "Listening ports count",
+                    "command": "COUNT=$(ss -lntup 2>/dev/null | grep -c LISTEN); echo \"LISTENING_PORTS=$COUNT\"; ss -lntup 2>/dev/null | head -n 30; if [ \"$COUNT\" -le 20 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "SC-7.b",
-                    "title": "firewall_rules",
-                    "command": "if command -v ufw >/dev/null 2>&1; then ufw status verbose; fi; if command -v nft >/dev/null 2>&1; then nft list ruleset; fi; if command -v iptables >/dev/null 2>&1; then iptables -S; fi",
+                    "title": "Firewall activ",
+                    "command": "if command -v ufw >/dev/null 2>&1; then STATUS=$(ufw status 2>/dev/null | head -1); echo \"$STATUS\"; if echo \"$STATUS\" | grep -qi 'active'; then echo 'FIREWALL=ACTIVE'; echo 'CHECK=PASS'; else echo 'FIREWALL=INACTIVE'; echo 'CHECK=FAIL'; fi; elif command -v nft >/dev/null 2>&1; then RULES=$(nft list ruleset 2>/dev/null | wc -l); if [ \"$RULES\" -gt 2 ]; then echo 'FIREWALL=ACTIVE'; echo 'CHECK=PASS'; else echo 'FIREWALL=INACTIVE'; echo 'CHECK=FAIL'; fi; elif command -v iptables >/dev/null 2>&1; then RULES=$(iptables -S 2>/dev/null | grep -cv '^-P'); if [ \"$RULES\" -gt 0 ]; then echo 'FIREWALL=ACTIVE'; echo 'CHECK=PASS'; else echo 'FIREWALL=INACTIVE'; echo 'CHECK=FAIL'; fi; else echo 'FIREWALL=NOT_FOUND'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -392,14 +450,10 @@
             "automatedChecks": [
                 {
                     "checkId": "SC-8.a",
-                    "title": "cert_paths",
-                    "command": "ls -la /etc/ssl 2>/dev/null || true; ls -la /etc/letsencrypt 2>/dev/null || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "SC-8.b",
-                    "title": "nginx_config_extract",
-                    "command": "if command -v nginx >/dev/null 2>&1; then nginx -T 2>/dev/null | sed -n '1,240p'; else echo \"SKIP_NGINX\"; fi",
+                    "title": "SSL certificates present",
+                    "command": "CERTS=0; [ -d /etc/ssl/certs ] && CERTS=$(ls /etc/ssl/certs/*.pem 2>/dev/null | wc -l); LETSENCRYPT='NO'; [ -d /etc/letsencrypt/live ] && LETSENCRYPT='YES'; echo \"SSL_CERTS=$CERTS\"; echo \"LETSENCRYPT=$LETSENCRYPT\"; if [ \"$CERTS\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -424,14 +478,10 @@
             "automatedChecks": [
                 {
                     "checkId": "SI-2.a",
-                    "title": "pending_updates_deb",
-                    "command": "if command -v apt >/dev/null 2>&1; then apt-get -s upgrade 2>/dev/null | sed -n '1,240p'; else echo \"SKIP_APT\"; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "SI-2.b",
-                    "title": "pending_updates_rpm",
-                    "command": "if command -v dnf >/dev/null 2>&1; then dnf -q check-update || true; elif command -v yum >/dev/null 2>&1; then yum -q check-update || true; else echo \"SKIP_YUM_DNF\"; fi",
+                    "title": "Pending security updates",
+                    "command": "if command -v apt >/dev/null 2>&1; then UPGRADABLE=$(apt list --upgradable 2>/dev/null | grep -c -v '^Listing'); echo \"PENDING_UPDATES=$UPGRADABLE\"; if [ \"$UPGRADABLE\" -le 20 ]; then echo 'CHECK=PASS'; else echo 'CHECK=HIGH_PENDING'; fi; elif command -v dnf >/dev/null 2>&1; then COUNT=$(dnf -q check-update 2>/dev/null | grep -c '.'); echo \"PENDING_UPDATES=$COUNT\"; if [ \"$COUNT\" -le 20 ]; then echo 'CHECK=PASS'; else echo 'CHECK=HIGH_PENDING'; fi; else echo 'SKIP_PKG_MGR'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -456,14 +506,18 @@
             "automatedChecks": [
                 {
                     "checkId": "SI-3.a",
-                    "title": "clamav_check",
-                    "command": "systemctl status clamav-freshclam --no-pager 2>/dev/null || true; clamscan --version 2>/dev/null || true",
+                    "title": "Antimalware presence",
+                    "command": "FOUND=''; systemctl is-active clamav-freshclam >/dev/null 2>&1 && FOUND=\"$FOUND clamav\"; command -v clamscan >/dev/null 2>&1 && FOUND=\"$FOUND clamscan\"; command -v rkhunter >/dev/null 2>&1 && FOUND=\"$FOUND rkhunter\"; if [ -n \"$FOUND\" ]; then echo \"ANTIMALWARE=$FOUND\"; echo 'CHECK=PASS'; else echo 'ANTIMALWARE=NONE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "SI-3.b",
-                    "title": "edr_agent_presence",
-                    "command": "ps aux 2>/dev/null | grep -iE 'falcon|crowdstrike|sentinel|defender|elastic-agent|osquery' | grep -v grep | head -n 50 || true",
+                    "title": "EDR agent presence",
+                    "command": "FOUND=''; for p in falcon-sensor osqueryd elastic-agent wazuh-agent; do pgrep -x \"$p\" >/dev/null 2>&1 && FOUND=\"$FOUND $p\"; done; if [ -n \"$FOUND\" ]; then echo \"EDR_AGENTS=$FOUND\"; echo 'CHECK=PASS'; else echo 'EDR_AGENTS=NONE'; echo 'CHECK=INFO'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -478,20 +532,18 @@
             "automatedChecks": [
                 {
                     "checkId": "SI-4.a",
-                    "title": "process_snapshot",
-                    "command": "ps aux --sort=-%cpu | head -n 40; echo \"== MEM ==\"; ps aux --sort=-%mem | head -n 40",
+                    "title": "Process snapshot",
+                    "command": "TOTAL=$(ps aux | wc -l); ROOT_PROCS=$(ps -eo user | grep -c '^root'); echo \"TOTAL_PROCESSES=$TOTAL\"; echo \"ROOT_PROCESSES=$ROOT_PROCS\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "SI-4.b",
-                    "title": "net_snapshot",
-                    "command": "ss -antup 2>/dev/null | head -n 240 || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "SI-4.c",
-                    "title": "persistence_points",
-                    "command": "ls -la /etc/cron.* 2>/dev/null || true; crontab -l 2>/dev/null || true; ls -la /etc/systemd/system 2>/dev/null | head -n 200 || true",
+                    "title": "Active connections",
+                    "command": "ESTABLISHED=$(ss -antup 2>/dev/null | grep -c ESTAB); LISTEN=$(ss -antup 2>/dev/null | grep -c LISTEN); echo \"ESTABLISHED_CONNECTIONS=$ESTABLISHED\"; echo \"LISTENING_PORTS=$LISTEN\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -506,8 +558,10 @@
             "automatedChecks": [
                 {
                     "checkId": "IR-4.a",
-                    "title": "triage_bundle",
-                    "command": "echo \"== TIME ==\"; date; echo \"== UPTIME ==\"; uptime; echo \"== USERS ==\"; who; echo \"== DISK ==\"; df -h; echo \"== KERNEL ==\"; uname -a; echo \"== AUTH LAST ==\"; last -n 30 2>/dev/null || true",
+                    "title": "IR tools availability",
+                    "command": "TOOLS=''; command -v ps >/dev/null 2>&1 && TOOLS=\"$TOOLS ps\"; command -v ss >/dev/null 2>&1 && TOOLS=\"$TOOLS ss\"; command -v journalctl >/dev/null 2>&1 && TOOLS=\"$TOOLS journalctl\"; command -v last >/dev/null 2>&1 && TOOLS=\"$TOOLS last\"; command -v tcpdump >/dev/null 2>&1 && TOOLS=\"$TOOLS tcpdump\"; COUNT=$(echo $TOOLS | wc -w); echo \"IR_TOOLS=$TOOLS\"; echo \"IR_TOOLS_COUNT=$COUNT\"; if [ \"$COUNT\" -ge 3 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -532,14 +586,18 @@
             "automatedChecks": [
                 {
                     "checkId": "CP-9.a",
-                    "title": "backup_jobs",
-                    "command": "ls -la /etc/cron.* 2>/dev/null || true; grep -R \"backup\\|restic\\|borg\\|rclone\\|rsync\" -n /etc/cron.* /etc/crontab 2>/dev/null | head -n 200 || true",
+                    "title": "Backup tools presence",
+                    "command": "TOOLS=''; command -v restic >/dev/null 2>&1 && TOOLS=\"$TOOLS restic\"; command -v borg >/dev/null 2>&1 && TOOLS=\"$TOOLS borg\"; command -v rclone >/dev/null 2>&1 && TOOLS=\"$TOOLS rclone\"; command -v rsync >/dev/null 2>&1 && TOOLS=\"$TOOLS rsync\"; command -v tar >/dev/null 2>&1 && TOOLS=\"$TOOLS tar\"; if [ -n \"$TOOLS\" ]; then echo \"BACKUP_TOOLS=$TOOLS\"; echo 'CHECK=PASS'; else echo 'BACKUP_TOOLS=NONE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "CP-9.b",
-                    "title": "backup_tools",
-                    "command": "command -v restic 2>/dev/null && restic version || true; command -v borg 2>/dev/null && borg --version || true; command -v rclone 2>/dev/null && rclone version | head -n 5 || true",
+                    "title": "Cron backup jobs",
+                    "command": "JOBS=$(grep -rlE 'backup|restic|borg|rclone|rsync' /etc/cron.* /etc/crontab 2>/dev/null | wc -l); echo \"BACKUP_CRON_JOBS=$JOBS\"; if [ \"$JOBS\" -gt 0 ]; then echo 'CHECK=PASS'; grep -rE 'backup|restic|borg|rclone|rsync' /etc/cron.* /etc/crontab 2>/dev/null | head -n 10; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -564,8 +622,10 @@
             "automatedChecks": [
                 {
                     "checkId": "RA-5.a",
-                    "title": "sbom_inputs_os_pkg",
-                    "command": "cat /etc/os-release 2>/dev/null || true; uname -r; if command -v dpkg-query >/dev/null 2>&1; then dpkg-query -W -f='${Package} ${Version}\\n' | head -n 400; elif command -v rpm >/dev/null 2>&1; then rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\\n' | head -n 400; fi",
+                    "title": "OS si pachete SBOM",
+                    "command": "if [ -f /etc/os-release ]; then . /etc/os-release; echo \"OS=$ID $VERSION_ID\"; fi; echo \"KERNEL=$(uname -r)\"; if command -v dpkg-query >/dev/null 2>&1; then PKG_COUNT=$(dpkg-query -W 2>/dev/null | wc -l); echo \"PACKAGE_COUNT=$PKG_COUNT\"; elif command -v rpm >/dev/null 2>&1; then PKG_COUNT=$(rpm -qa 2>/dev/null | wc -l); echo \"PACKAGE_COUNT=$PKG_COUNT\"; fi; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -580,14 +640,10 @@
             "automatedChecks": [
                 {
                     "checkId": "MA-4.a",
-                    "title": "ssh_login_config",
-                    "command": "grep -E '^(PermitRootLogin|PasswordAuthentication|AllowUsers|AllowGroups|PubkeyAuthentication|LogLevel|MaxAuthTries|ClientAliveInterval|ClientAliveCountMax)' -n /etc/ssh/sshd_config 2>/dev/null || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "MA-4.b",
-                    "title": "sudo_usage_recent",
-                    "command": "journalctl --no-pager -n 300 | grep -iE 'sudo' | head -n 200 || true",
+                    "title": "SSH login restrictions",
+                    "command": "SCORE=0; VALUE=$(sshd -T 2>/dev/null | grep -i 'permitrootlogin' | awk '{print $2}'); echo \"PermitRootLogin=$VALUE\"; echo \"$VALUE\" | grep -qiE '^(no|prohibit-password)$' && SCORE=$((SCORE+1)); VALUE=$(sshd -T 2>/dev/null | grep -i 'maxauthtries' | awk '{print $2}'); echo \"MaxAuthTries=$VALUE\"; [ -n \"$VALUE\" ] && [ \"$VALUE\" -le 5 ] 2>/dev/null && SCORE=$((SCORE+1)); echo \"SSH_HARDENING_SCORE=$SCORE/2\"; if [ \"$SCORE\" -ge 1 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -643,15 +699,17 @@
         },
         {
             "controlId": "SC-13",
-            "title": "Cryptographic Protection: configuratii crypto si modul FIPS unde e necesar",
+            "title": "Cryptographic Protection: configuratii crypto si modul FIPS",
             "category": "Cryptography",
             "description": "Criptografia folosita este aliniata politicii (algoritmi moderni), iar modul FIPS este activ unde este cerut. (Family: SC)",
             "severity": "MEDIUM",
             "automatedChecks": [
                 {
                     "checkId": "SC-13.a",
-                    "title": "fips_mode_check",
-                    "command": "cat /proc/sys/crypto/fips_enabled 2>/dev/null || echo \"NO_FIPS_FLAG\"; (command -v update-crypto-policies >/dev/null 2>&1 && update-crypto-policies --show) || true; (command -v openssl >/dev/null 2>&1 && openssl version -a) || true",
+                    "title": "FIPS si crypto policy",
+                    "command": "FIPS=$(cat /proc/sys/crypto/fips_enabled 2>/dev/null); if [ \"$FIPS\" = '1' ]; then echo 'FIPS=ENABLED'; else echo 'FIPS=DISABLED'; fi; if command -v update-crypto-policies >/dev/null 2>&1; then POLICY=$(update-crypto-policies --show 2>/dev/null); echo \"CRYPTO_POLICY=$POLICY\"; fi; OPENSSL=$(openssl version 2>/dev/null); echo \"OPENSSL=$OPENSSL\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -676,14 +734,10 @@
             "automatedChecks": [
                 {
                     "checkId": "SC-28.a",
-                    "title": "block_devices",
-                    "command": "lsblk -f 2>/dev/null || true; blkid 2>/dev/null || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "SC-28.b",
-                    "title": "luks_status",
-                    "command": "command -v cryptsetup >/dev/null 2>&1 && cryptsetup status 2>/dev/null || true",
+                    "title": "Block devices si filesystems",
+                    "command": "lsblk -f 2>/dev/null | head -n 20; CRYPTO=$(lsblk -f 2>/dev/null | grep -c 'crypto_LUKS'); echo \"LUKS_VOLUMES=$CRYPTO\"; if [ \"$CRYPTO\" -gt 0 ]; then echo 'ENCRYPTION=YES'; else echo 'ENCRYPTION=NO'; fi; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],

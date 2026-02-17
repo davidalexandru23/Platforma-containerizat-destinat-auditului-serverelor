@@ -2,144 +2,243 @@ package collector
 
 import (
 	"context"
+	"crypto/rsa"
+	"fmt"
+	"log"
+	"os"
 	"os/exec"
+	"os/user"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"bittrail-agent/internal/api"
+	"bittrail-agent/internal/crypto"
 )
 
-type AuditRunner struct{}
-
-func NewAuditRunner() *AuditRunner {
-	return &AuditRunner{}
+type AuditRunner struct {
+	client     *api.Client
+	privateKey *rsa.PrivateKey
+	backendKey []byte
 }
 
-func (ar *AuditRunner) RunChecks(checks []api.PendingCheck) []api.CheckResult {
-	var results []api.CheckResult
+func NewAuditRunner(client *api.Client, keyPath, backendKeyPath string) *AuditRunner {
+	var privKey *rsa.PrivateKey
+	var backendKey []byte
+
+	if keyPath != "" {
+		pk, err := crypto.LoadPrivateKey(keyPath)
+		if err != nil {
+			log.Printf("WARNING: Failed to load agent private key: %v. Signing disabled.", err)
+		} else {
+			privKey = pk
+		}
+	}
+
+	if backendKeyPath != "" {
+		bk, err := os.ReadFile(backendKeyPath)
+		if err != nil {
+			log.Printf("WARNING: Failed to load backend public key: %v. Signature verification disabled.", err)
+		} else {
+			backendKey = bk
+		}
+	}
+
+	return &AuditRunner{
+		client:     client,
+		privateKey: privKey,
+		backendKey: backendKey,
+	}
+}
+
+func (ar *AuditRunner) CheckAndRun() error {
+	checks, err := ar.client.GetPendingChecks()
+	if err != nil {
+		return err
+	}
+
+	if len(checks) == 0 {
+		return nil
+	}
+
+	log.Printf("Received %d pending checks", len(checks))
+
+	// Grupare dupa AuditRunID pentru trimitere in loturi
+	resultsByRun := make(map[string][]api.CheckResult)
 
 	for _, check := range checks {
-		result := ar.runSingleCheck(check)
-		results = append(results, result)
-	}
-
-	return results
-}
-
-func (ar *AuditRunner) runSingleCheck(check api.PendingCheck) api.CheckResult {
-	maxRetries := 5
-	var result api.CheckResult
-	var lastErr error
-
-	// Retry mechanism: Tries to execute the check up to maxRetries times.
-	// This ensures transient issues (e.g. temporary lock files, busy resources) don't cause false failures.
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		result = api.CheckResult{
-			AutomatedCheckID: check.AutomatedCheckID,
-			Status:           "ERROR",
+		// 1. Verificare semnatura (daca exista cheie backend)
+		if len(ar.backendKey) > 0 && check.Signature != "" {
+			verifyData := check.Command + check.CheckID
+			if err := crypto.VerifySignature(ar.backendKey, []byte(verifyData), check.Signature); err != nil {
+				log.Printf("SECURITY ALERT: Signature verification failed for check %s: %v", check.CheckID, err)
+				resultsByRun[check.AuditRunID] = append(resultsByRun[check.AuditRunID], api.CheckResult{
+					AutomatedCheckID: check.AutomatedCheckID,
+					Status:           "ERROR",
+					ErrorMessage:     "Security Error: Invalid Signature",
+				})
+				continue
+			}
 		}
 
-		if check.CheckType != "COMMAND" || check.Command == "" {
-			result.Status = "SKIPPED"
-			result.Output = "Tip check nesuportat sau comanda lipsa"
-			return result
-		}
-
-		// Executa comanda cu timeout de 30 secunde
+		// 2. Executare
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		output, exitCode, err := ar.executeCheck(ctx, check)
+		cancel()
 
-		cmd := exec.CommandContext(ctx, "sh", "-c", check.Command)
-		output, err := cmd.CombinedOutput()
-		cancel() // Call cancel immediately after command finishes
+		// 3. Metadate Chain of Custody
+		hostname, _ := os.Hostname()
+		currentUser, _ := user.Current()
+		username := "unknown"
+		if currentUser != nil {
+			username = currentUser.Username
+		}
+		timestamp := time.Now().Format(time.RFC3339)
 
-		result.Output = strings.TrimSpace(string(output))
+		// 4. Redactare
+		redactedOutput := crypto.RedactSecrets(output)
+		outputHash := crypto.CalculateHash(redactedOutput)
+
+		result := api.CheckResult{
+			AutomatedCheckID: check.AutomatedCheckID,
+			Status:           "FAIL",
+			Output:           redactedOutput,
+			// Campuri CoC
+			OutputHash:    outputHash,
+			ExecTimestamp: timestamp,
+			ExecHostname:  hostname,
+			ExecUser:      username,
+			ExitCode:      exitCode,
+		}
 
 		if err != nil {
-			lastErr = err
-			// Timeout
+			result.Status = "ERROR"
+			result.ErrorMessage = err.Error()
 			if ctx.Err() == context.DeadlineExceeded {
-				result.Status = "ERROR"
 				result.ErrorMessage = "Timeout (30s)"
-			} else {
-				// Exit code != 0 or other error
-				// Daca avem expected result, verificam daca output-ul e totusi corect (uneori exit code e != 0 dar rezultatul e bun?)
-				// De regula, exit code != 0 inseamna eroare, dar sa fim flexibili daca userul a definit un expected result.
-				if check.ExpectedResult != "" {
-					if matchesExpected(result.Output, check) {
-						result.Status = "PASS"
-					} else {
-						result.Status = "FAIL"
-						if check.OnFailMessage != "" {
-							result.ErrorMessage = check.OnFailMessage
-						}
-						// Daca e FAIL logic, nu mai facem retry
-						break
-					}
-				} else {
-					result.Status = "FAIL"
-					result.ErrorMessage = err.Error()
-					// Check failed execution? Retry might help if it was permission denied intermittent or resource busy?
-					// But usually exit code != 0 is permanent. Let's assume retry if it's "ERROR" but here we marked logic FAIL.
-					break
-				}
 			}
 		} else {
-			// Success (exit code 0)
+			// Succes (exit code 0 sau gestionat)
 			if check.ExpectedResult != "" {
-				if matchesExpected(result.Output, check) {
+				if matchesExpected(redactedOutput, check) {
 					result.Status = "PASS"
-				} else {
-					result.Status = "FAIL"
-					if check.OnFailMessage != "" {
-						result.ErrorMessage = check.OnFailMessage
-					}
 				}
 			} else {
-				// If no expected result, assume PASS if exit code 0
-				result.Status = "PASS"
+				// Fara asteptari, PASS daca exit code 0
+				if exitCode == 0 {
+					result.Status = "PASS"
+				}
 			}
-			// Don't retry on success or logical fail/pass
-			break
 		}
 
-		// If we are here, it's an ERROR (timeout or execution error not handled above). Retry.
-		if attempt < maxRetries {
-			time.Sleep(1 * time.Second)
+		// 5. Semnare rezultat
+		if ar.privateKey != nil {
+			// Semnare: OutputHash + Status + Timestamp
+			signData := result.OutputHash + result.Status + result.ExecTimestamp
+			sig, err := crypto.SignData(ar.privateKey, []byte(signData))
+			if err == nil {
+				result.Signature = sig
+			} else {
+				log.Printf("Error signing result: %v", err)
+			}
 		}
+
+		resultsByRun[check.AuditRunID] = append(resultsByRun[check.AuditRunID], result)
 	}
 
-	// Final check if ERROR persists after retries
-	if result.Status == "ERROR" {
-		if lastErr != nil {
-			result.ErrorMessage = lastErr.Error()
+	// Trimitere rezultate
+	for runID, results := range resultsByRun {
+		if err := ar.client.SendCheckResults(runID, results); err != nil {
+			log.Printf("Failed to send results for run %s: %v", runID, err)
 		} else {
-			result.ErrorMessage = "Verification failed after 5 attempts"
+			log.Printf("Sent %d results for run %s", len(results), runID)
 		}
 	}
 
-	return result
+	return nil
 }
 
-// matchesExpected verifica output-ul bazat pe criteriile din check
+func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck) (string, int, error) {
+	// Verificare siguranta comanda (ultima linie de aparare)
+	cmdToCheck := check.Command
+	if check.CheckType == "SCRIPT" {
+		cmdToCheck = check.Script
+	}
+	if safe, reason := isCommandSafe(cmdToCheck); !safe {
+		log.Printf("[SECURITY] Comanda BLOCATA pe agent: %s — motiv: %s", cmdToCheck, reason)
+		return "", -1, fmt.Errorf("comanda blocata de agent: %s", reason)
+	}
+
+	var cmd *exec.Cmd
+
+	if check.CheckType == "SCRIPT" {
+		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", check.Script)
+	} else {
+		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", check.Command)
+	}
+
+	output, err := cmd.CombinedOutput()
+
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+
+	return string(output), exitCode, err
+}
+
+// Blacklist minimal pe agent — ultima linie de aparare
+var dangerousPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\brm\s+(-[a-zA-Z]*[rf][a-zA-Z]*\s+)*\/`),
+	regexp.MustCompile(`\bdd\s+`),
+	regexp.MustCompile(`\bmkfs\b`),
+	regexp.MustCompile(`\bshutdown\b`),
+	regexp.MustCompile(`(^|[;&|]\s*)reboot(\s|$)`),
+	regexp.MustCompile(`\bpoweroff\b`),
+	regexp.MustCompile(`\bhalt\b`),
+	regexp.MustCompile(`\buseradd\b`),
+	regexp.MustCompile(`\buserdel\b`),
+	regexp.MustCompile(`\bpasswd\b`),
+	regexp.MustCompile(`\bsystemctl\s+(start|stop|restart|enable|disable)\b`),
+	regexp.MustCompile(`\biptables\s+-(F|X|D)\b`),
+	regexp.MustCompile(`\beval\s+`),
+	regexp.MustCompile(`\bexec\s+`),
+}
+
+// isCommandSafe verifica daca comanda e sigura pentru executie
+func isCommandSafe(command string) (bool, string) {
+	cmd := strings.TrimSpace(command)
+	if cmd == "" {
+		return true, ""
+	}
+	for _, p := range dangerousPatterns {
+		if p.MatchString(cmd) {
+			return false, p.String()
+		}
+	}
+	return true, ""
+}
+
+// matchesExpected verifica output conform criteriu
 func matchesExpected(output string, check api.PendingCheck) bool {
-	// 1. Normalizare (common)
+	// 1. Normalizare
 	output = normalizeOutput(output, check.Normalize)
 	expected := check.ExpectedResult
 
-	// 2. Parser (basic for now)
+	// 2. Parsare (basic)
 	if check.Parser == "FIRST_LINE" {
 		lines := strings.Split(output, "\n")
 		if len(lines) > 0 {
 			output = lines[0]
 		}
-	} else if check.Parser == "JSON" {
-		// Passthrough for now, complex JSON parsing requires external libs or map[string]interface{}
-		// Assuming comparisons are done on raw JSON string or extracted via basic string ops
 	}
 
-	// 3. Comparison
+	// 3. Comparatie
 	comparison := strings.ToUpper(check.Comparison)
 	if comparison == "" {
 		comparison = "EQUALS"
@@ -153,14 +252,12 @@ func matchesExpected(output string, check api.PendingCheck) bool {
 	case "REGEX":
 		matched, err := regexp.MatchString(expected, output)
 		if err != nil {
-			// Invalid regex pattern treating as no match
 			return false
 		}
 		return matched
 	case "NUM_EQ", "NUM_GE", "NUM_LE", "NUM_GT", "NUM_LT":
 		return compareNumeric(output, expected, comparison)
 	default:
-		// Default to equals
 		return output == expected
 	}
 }
@@ -172,7 +269,6 @@ func normalizeOutput(val string, rules []string) string {
 		case "LOWER":
 			val = strings.ToLower(val)
 		case "SQUASH_WS":
-			// Replace multiple spaces with single space
 			fields := strings.Fields(val)
 			val = strings.Join(fields, " ")
 		}
@@ -181,12 +277,11 @@ func normalizeOutput(val string, rules []string) string {
 }
 
 func compareNumeric(actualStr, expectedStr, op string) bool {
-	// Extract numbers (basic float parsing)
 	actualVal, err1 := strconv.ParseFloat(actualStr, 64)
 	expectedVal, err2 := strconv.ParseFloat(expectedStr, 64)
 
 	if err1 != nil || err2 != nil {
-		return false // Not numbers
+		return false
 	}
 
 	switch op {

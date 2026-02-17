@@ -46,7 +46,7 @@ router.post('/:serverId/metrics',
     async (req, res, next) => {
         try {
             const agentToken = req.headers['x-agent-token'];
-            // Extragere IP (gestioneaza header-ele proxy daca este necesar, dar req.ip este un inceput bun)
+            // Extragere IP (gestioneaza header-ele proxy)
             const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
             const result = await agentService.submitMetrics(req.params.serverId, req.body, agentToken, ipAddress);
             res.json(result);

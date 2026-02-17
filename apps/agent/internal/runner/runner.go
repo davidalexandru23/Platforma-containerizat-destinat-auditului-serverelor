@@ -1,7 +1,9 @@
 package runner
 
 import (
+	"crypto/tls"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,117 +14,102 @@ import (
 	"bittrail-agent/internal/config"
 )
 
-func Run(cfg *config.Config, version string) error {
-	fmt.Println()
-	fmt.Println("=== BitTrail Agent v" + version + " ===")
-	fmt.Println()
-	fmt.Printf("Server ID:  %s\n", cfg.ServerID)
-	fmt.Printf("Backend:    %s\n", cfg.ServerURL)
-	fmt.Printf("Metrici:    fiecare %ds\n", cfg.MetricsInterval)
-	fmt.Printf("Inventar:   fiecare %ds\n", cfg.InventoryInterval)
-	fmt.Println()
-	fmt.Println("Agent pornit. Apasare Ctrl+C pentru oprire.")
-	fmt.Println()
+func Run(configPath string) error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("eroare la incarcarea configuratiei: %w", err)
+	}
 
-	client := api.NewClient(cfg.ServerURL, cfg.ServerID, cfg.AgentToken)
+	// --- Configurare PKI ---
+	var tlsConfig *tls.Config
+	if cfg.CertFile != "" && cfg.KeyFile != "" {
+		fmt.Printf("Loading certificates from:\n  Cert: %s\n  Key:  %s\n", cfg.CertFile, cfg.KeyFile)
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			log.Printf("WARNING: Failed to load keypair: %v. Running without mTLS.", err)
+		} else {
+			// Configurare TLS custom
+			tlsConfig = &tls.Config{
+				Certificates:       []tls.Certificate{cert},
+				InsecureSkipVerify: true, // Dev: cert server self-signed
+			}
+			log.Println("mTLS enabled successfully.")
+		}
+	}
 
-	// Colectori
+	client := api.NewClient(cfg.ServerURL, cfg.ServerID, cfg.AgentToken, tlsConfig)
+
+	// Initializare colectori
 	metricsCollector := collector.NewMetricsCollector()
 	inventoryCollector := collector.NewInventoryCollector()
-	auditRunner := collector.NewAuditRunner()
+	auditRunner := collector.NewAuditRunner(client, cfg.KeyFile, cfg.BackendKeyFile)
 
-	// Canale oprire
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	// Canal oprire (graceful shutdown)
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
 
-	// Tickere
+	// Tickere job-uri periodice
 	metricsTicker := time.NewTicker(time.Duration(cfg.MetricsInterval) * time.Second)
 	inventoryTicker := time.NewTicker(time.Duration(cfg.InventoryInterval) * time.Second)
 	auditTicker := time.NewTicker(time.Duration(cfg.AuditCheckInterval) * time.Second)
 
-	// Colectare imediata la pornire
-	go sendMetrics(client, metricsCollector)
-	go sendInventory(client, inventoryCollector)
+	defer metricsTicker.Stop()
+	defer inventoryTicker.Stop()
+	defer auditTicker.Stop()
+
+	// Colectare initiala
+	go func() {
+		log.Println("Collecting initial inventory...")
+		if inv, err := inventoryCollector.Collect(); err == nil {
+			if err := client.SendInventory(inv); err != nil {
+				log.Printf("Error sending initial inventory: %v", err)
+			}
+		}
+	}()
+
+	log.Printf("Agent started. Server: %s (ID: %s)", cfg.ServerURL, cfg.ServerID)
 
 	for {
 		select {
 		case <-metricsTicker.C:
-			go sendMetrics(client, metricsCollector)
+			metrics, err := metricsCollector.Collect()
+			if err != nil {
+				log.Printf("Error collecting metrics: %v", err)
+				continue
+			}
+			if err := client.SendMetrics(metrics); err != nil {
+				log.Printf("Error sending metrics: %v", err)
+			}
 
 		case <-inventoryTicker.C:
-			go sendInventory(client, inventoryCollector)
+			inv, err := inventoryCollector.Collect()
+			if err != nil {
+				log.Printf("Error collecting inventory: %v", err)
+				continue
+			}
+			if err := client.SendInventory(inv); err != nil {
+				log.Printf("Error sending inventory: %v", err)
+			}
 
 		case <-auditTicker.C:
-			go checkPendingAudits(client, auditRunner)
+			// Verificare audituri in asteptare
+			if err := auditRunner.CheckAndRun(); err != nil {
+				log.Printf("Error running audit checks: %v", err)
+			}
 
-		case <-stop:
-			fmt.Println()
-			fmt.Println("Oprire agent...")
+		case <-stopChan:
+			log.Println("Shutting down agent...")
 			return nil
 		}
 	}
 }
 
-func sendMetrics(client *api.Client, mc *collector.MetricsCollector) {
-	metrics, err := mc.Collect()
-	if err != nil {
-		fmt.Printf("[WARN] Eroare colectare metrici: %v\n", err)
-		return
-	}
-
-	if err := client.SendMetrics(metrics); err != nil {
-		fmt.Printf("[WARN] Eroare trimitere metrici: %v\n", err)
-	}
-}
-
-func sendInventory(client *api.Client, ic *collector.InventoryCollector) {
-	inventory, err := ic.Collect()
-	if err != nil {
-		fmt.Printf("[WARN] Eroare colectare inventory: %v\n", err)
-		return
-	}
-
-	if err := client.SendInventory(inventory); err != nil {
-		fmt.Printf("[WARN] Eroare trimitere inventory: %v\n", err)
-	} else {
-		fmt.Println("[INFO] Inventory actualizat")
-	}
-}
-
-func checkPendingAudits(client *api.Client, ar *collector.AuditRunner) {
-	checks, err := client.GetPendingChecks()
-	if err != nil {
-		return // Silentios daca nu sunt checks
-	}
-
-	if len(checks) == 0 {
-		return
-	}
-
-	fmt.Printf("[INFO] Procesare %d controale audit...\n", len(checks))
-
-	// Grupare per AuditRunID
-	byRun := make(map[string][]api.PendingCheck)
-	for _, check := range checks {
-		byRun[check.AuditRunID] = append(byRun[check.AuditRunID], check)
-	}
-
-	for auditRunID, runChecks := range byRun {
-		results := ar.RunChecks(runChecks)
-		if err := client.SendCheckResults(auditRunID, results); err != nil {
-			fmt.Printf("[WARN] Eroare trimitere rezultate audit: %v\n", err)
-		} else {
-			fmt.Printf("[INFO] Trimis %d rezultate pentru audit %s\n", len(results), auditRunID[:8])
-		}
-	}
-}
-
-// TestCollectors - pentru depanare
+// TestCollectors - depanare
 func TestCollectors() error {
 	fmt.Println("=== Test Colectori BitTrail Agent ===")
 	fmt.Println()
 
-	// test metrici
+	// Test metrici
 	fmt.Println("--- Metrici ---")
 	mc := collector.NewMetricsCollector()
 	metrics, err := mc.Collect()
@@ -141,7 +128,7 @@ func TestCollectors() error {
 
 	fmt.Println()
 
-	// test inventory
+	// Test inventar
 	fmt.Println("--- Inventory ---")
 	ic := collector.NewInventoryCollector()
 	inv, err := ic.Collect()

@@ -68,19 +68,22 @@ router.post('/register',
 router.post('/login',
     authLimiter,
     [
-        body('email').isEmail().withMessage('Email invalid'),
+        body('email').trim().isEmail().withMessage('Email invalid'),
         body('password').notEmpty().withMessage('Parola obligatorie'),
     ],
     async (req, res, next) => {
         try {
             const errors = validationResult(req);
             if (!errors.isEmpty()) {
+                console.log(`[LOGIN ERROR] Validation failed for ${req.body.email}:`, errors.array());
                 return res.status(400).json({ errors: errors.array() });
             }
 
+            console.log(`[LOGIN ATTEMPT] Email: '${req.body.email}'`);
             const result = await authService.login(req.body);
             res.json(result);
         } catch (error) {
+            console.error(`[LOGIN FAIL] Email: '${req.body.email}' | Error: ${error.message}`);
             next(error);
         }
     }

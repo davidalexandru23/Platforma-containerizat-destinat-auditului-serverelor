@@ -17,7 +17,7 @@ const authenticate = async (req, res, next) => {
         // Cautare utilizator in baza de date
         const user = await prisma.user.findUnique({
             where: { id: decoded.sub },
-            include: { role: true },
+            include: { role: { select: { id: true, name: true } } },
         });
 
         if (!user) {

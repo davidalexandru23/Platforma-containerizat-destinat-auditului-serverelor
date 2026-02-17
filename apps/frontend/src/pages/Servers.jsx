@@ -16,7 +16,7 @@ function Servers() {
     useEffect(() => {
         loadServers();
 
-        // WebSocket pentru actualizari in timp real
+        // WebSocket actualizari live
         const token = localStorage.getItem('accessToken');
         const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:3000';
 
@@ -76,7 +76,7 @@ function Servers() {
 
     const handleSortRisk = () => {
         const nextSort = {
-            'none': 'desc', // Start with critical first (high risk)
+            'none': 'desc', // Incepem cu severitate critica (risc mare)
             'desc': 'asc',
             'asc': 'none'
         };
@@ -222,18 +222,26 @@ function Servers() {
                         <div className="spinner"></div>
                         <p>Se incarca serverele...</p>
                     </div>
-                ) : filteredServers.length === 0 ? (
+                ) : servers.length === 0 ? (
                     <div className="empty-state">
                         <span className="material-symbols-outlined">dns</span>
                         <p>
                             Nu exista servere inregistrate.
                         </p>
-                        {(
-                            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-                                <span className="material-symbols-outlined">add</span>
-                                Adauga primul server
-                            </button>
-                        )}
+                        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+                            <span className="material-symbols-outlined">add</span>
+                            Adauga primul server
+                        </button>
+                    </div>
+                ) : filteredServers.length === 0 ? (
+                    <div className="empty-state">
+                        <span className="material-symbols-outlined" style={{ opacity: 0.5 }}>filter_list_off</span>
+                        <p style={{ color: 'var(--text-muted)' }}>
+                            Niciun server nu corespunde filtrelor selectate.
+                        </p>
+                        <button className="btn btn-secondary btn-sm" onClick={() => { setFilter('all'); setRiskSort('none'); }}>
+                            Reseteaza filtre
+                        </button>
                     </div>
                 ) : (
                     <>
@@ -380,10 +388,8 @@ function AddServerModal({ onClose, onSuccess }) {
 
         try {
             const res = await api.post('/servers', { name: hostname, hostname });
-            // Presupunand ca backend-ul returneaza obiectul server complet inclusiv enrollmentToken
-            // sau s-ar putea sa trebuiasca sa il preluam separat daca nu este in raspuns.
-            // Bazat pe implementarea tipica, creare returneaza obiectul creat.
-            // Sa verificam daca raspunsul are token-ul direct sau in interiorul obiectului server.
+            // Backend returneaza obiect complet
+            // Verificare token in raspuns
             const token = res.data.enrollmentToken || 'TOKEN-NOT-RETURNED-CHECK-BACKEND';
             onSuccess(token);
         } catch (err) {

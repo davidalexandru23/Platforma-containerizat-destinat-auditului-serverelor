@@ -28,7 +28,7 @@ echo
 echo "Output: $BUILD_DIR/$BINARY_NAME"
 echo "Dimensiune: $(ls -lh "$BUILD_DIR/$BINARY_NAME" | awk '{print $5}')"
 echo
-echo "Pentru a instala pe server Linux:"
+echo "Instalare pe server Linux:"
 echo "  scp $BUILD_DIR/$BINARY_NAME user@server:/tmp/"
 echo "  ssh user@server 'sudo mv /tmp/$BINARY_NAME /usr/local/bin/ && sudo chmod +x /usr/local/bin/$BINARY_NAME'"
 echo

@@ -71,7 +71,7 @@ router.post('/',
                 return res.status(400).json({ errors: errors.array() });
             }
 
-            const server = await serversService.create(req.body);
+            const server = await serversService.create(req.body, req.user.id);
             res.status(201).json(server);
         } catch (error) {
             next(error);
@@ -133,6 +133,7 @@ router.delete('/:id',
  */
 router.get('/:id/enrollToken',
     authenticate,
+    authorize('ADMIN'),
     async (req, res, next) => {
         try {
             const result = await serversService.getEnrollToken(req.params.id);
@@ -174,9 +175,13 @@ router.post('/:id/enrollToken',
  */
 router.get('/:id/permissions',
     authenticate,
-    authorize('ADMIN'),
+    authorize('ADMIN', 'AUDITOR'),
     async (req, res, next) => {
         try {
+            // Verificare acces daca nu e admin
+            if (req.user.role.name !== 'ADMIN') {
+                await serversService.checkAccess(req.user.id, req.params.id);
+            }
             const permissions = await serversService.getPermissions(req.params.id);
             res.json(permissions);
         } catch (error) {
@@ -195,10 +200,20 @@ router.get('/:id/permissions',
  */
 router.post('/:id/permissions',
     authenticate,
-    authorize('ADMIN'),
+    authorize('ADMIN', 'AUDITOR'),
     auditLog('GRANT_PERMISSION', 'SERVER'),
     async (req, res, next) => {
         try {
+            // Verificare acces daca nu e admin
+            if (req.user.role.name !== 'ADMIN') {
+                // Verificam daca are dreptul MANAGE pentru a da share
+                const userPerms = await prisma.permission.findFirst({
+                    where: { userId: req.user.id, serverId: req.params.id }
+                });
+                if (!userPerms || !userPerms.capabilities.includes('MANAGE')) {
+                    throw new ForbiddenError('Nu ai dreptul de a gestiona permisiuni pe acest server');
+                }
+            }
             const { userId, capabilities, expiresAt } = req.body;
             const result = await serversService.grantPermission(req.params.id, userId, capabilities, expiresAt);
             res.json(result);
@@ -218,10 +233,20 @@ router.post('/:id/permissions',
  */
 router.delete('/:id/permissions/:userId',
     authenticate,
-    authorize('ADMIN'),
+    authorize('ADMIN', 'AUDITOR'),
     auditLog('REVOKE_PERMISSION', 'SERVER'),
     async (req, res, next) => {
         try {
+            // Verificare acces daca nu e admin
+            if (req.user.role.name !== 'ADMIN') {
+                // Verificam daca are dreptul MANAGE
+                const userPerms = await prisma.permission.findFirst({
+                    where: { userId: req.user.id, serverId: req.params.id }
+                });
+                if (!userPerms || !userPerms.capabilities.includes('MANAGE')) {
+                    throw new ForbiddenError('Nu ai dreptul de a gestiona permisiuni pe acest server');
+                }
+            }
             const result = await serversService.revokePermission(req.params.id, req.params.userId);
             res.json(result);
         } catch (error) {

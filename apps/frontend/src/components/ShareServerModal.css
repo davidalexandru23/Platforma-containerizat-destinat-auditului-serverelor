@@ -1,0 +1,65 @@
+/* ShareServerModal.css */
+.share-modal {
+    max-width: 700px;
+    width: 600px;
+}
+
+.share-form {
+    background-color: var(--bg-light);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    border: 1px solid var(--border);
+}
+
+.share-form h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.capabilities-group {
+    margin: 1.5rem 0;
+}
+
+.capabilities-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: normal !important;
+    cursor: pointer;
+    margin-bottom: 0.25rem !important;
+}
+
+.checkbox-label.disabled-check {
+    cursor: default;
+    opacity: 0.8;
+    background-color: var(--bg-hover);
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem !important;
+    border: 1px solid var(--border);
+}
+
+.permissions-list h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.permissions-list .data-table {
+    margin-top: 0.5rem;
+}
+
+.permissions-list .btn-icon.danger {
+    color: var(--danger);
+}
+
+.permissions-list .btn-icon.danger:hover {
+    background-color: rgba(220, 38, 38, 0.1);
+}

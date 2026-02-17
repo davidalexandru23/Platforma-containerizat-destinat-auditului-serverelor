@@ -103,7 +103,7 @@ async function runAudit(data, userId) {
         throw new BadRequestError('Nu poti porni audit pe un server offline. Verifica ca agentul e conectat.');
     }
 
-    // Determinam cea mai recenta versiune a template-ului
+    // Determinare cea mai recenta versiune a template-ului
     const templateVersion = await templatesService.getActiveVersion(templateId);
 
     // Initializare intrare audit in baza de date (status IN ASTEPTARE)
@@ -117,7 +117,7 @@ async function runAudit(data, userId) {
         },
     });
 
-    // Pregatim task-urile manuale (acestea nu depind de agent)
+    // Pregatire sarcini manuale (nu depind de agent)
     const manualChecks = templateVersion.controls
         .filter(c => !excludedControlIds?.includes(c.controlId))
         .flatMap(c => c.manualChecks);
@@ -131,6 +131,8 @@ async function runAudit(data, userId) {
             },
         });
     }
+
+    // Cleanup periodic metrici vechi (MetricSample, InventorySnapshot)
 
     // Calculare numar verificari automate necesare
     const activeControls = templateVersion.controls.filter(c => !excludedControlIds?.includes(c.controlId));
@@ -164,13 +166,13 @@ async function runAudit(data, userId) {
     }
 
     // Daca agent este online si exista verificari automate, pornire audit
-    if (server.agentIdentity?.agentToken && server.status === 'ONLINE') {
+    if (server.status === 'ONLINE') {
         await prisma.auditRun.update({
             where: { id: auditRun.id },
             data: { status: 'RUNNING', startedAt: new Date() },
         });
 
-        // broadcast progress
+        // Difuzare progres
         if (io) {
             io.of('/ws/audit').to(`audit:${auditRun.id}`).emit('progress', {
                 auditRunId: auditRun.id,
@@ -180,8 +182,8 @@ async function runAudit(data, userId) {
             });
         }
     } else if (server.status !== 'ONLINE') {
-        // Daca serverul nu e online, dar avem check-uri automate, ramane PENDING
-        // Poate e bine sa notificam userul ca agentul e offline
+        // Server offline, ramane PENDING
+        // Notificare utilizator agent offline (TODO)
     }
 
     return { auditRun, message: 'Audit creat cu succes' };
@@ -279,7 +281,7 @@ async function submitEvidence(auditRunId, taskId, data, file) {
 
     const evidence = await prisma.evidence.create({ data: evidenceData });
 
-    // Update status task
+    // Actualizare status sarcina
     await prisma.manualTaskResult.update({
         where: { id: taskId },
         data: {
@@ -363,14 +365,14 @@ async function completeAudit(id) {
         },
     });
 
-    // Update server risk level
+    // Actualizare nivel risc server
     const riskLevel = scoringService.calculateRiskLevel(scoring);
     await prisma.server.update({
         where: { id: auditRun.serverId },
         data: { riskLevel },
     });
 
-    // Broadcast completion via Notification Service
+    // Difuzare finalizare prin Serviciu Notificare
     const notificationType = scoring.overallStatus === 'NON_COMPLIANT'
         ? notificationService.NotificationType.AUDIT_FAILED
         : notificationService.NotificationType.AUDIT_COMPLETED;
@@ -380,10 +382,10 @@ async function completeAudit(id) {
         type: notificationType,
         title: `Audit completed`,
         body: `Finalizat cu status: ${scoring.overallStatus}. Score: ${scoring.automatedCompliancePercent}%`,
-        link: `/audit/${id}/report`
+        link: `/audits/${id}`
     });
 
-    // Broadcast progress via legacy websocket support (if needed) or utilize the new notification structure
+    // Difuzare progres (suport legacy)
     if (io) {
         io.of('/ws/audit').to(`audit:${id}`).emit('progress', {
             auditRunId: id,
@@ -411,37 +413,37 @@ async function updateAuditScoring(auditRunId) {
 }
 
 async function cleanupStaleAudits() {
-    const timeoutMinutes = 5;
-    const thresholdDate = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+    const timeoutMinutes = 15;
+    const timeoutThreshold = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+    const offlineThreshold = new Date(Date.now() - timeoutMinutes * 60 * 1000); // Assuming same timeout for offline check
 
-    // Check for audits running for too long OR where server is now offline
-    const staleAudits = await prisma.auditRun.findMany({
+    // Verificare audituri blocate prea mult timp SAU server offline
+    const stuckAudits = await prisma.auditRun.findMany({
         where: {
             status: 'RUNNING',
             OR: [
-                { updatedAt: { lt: thresholdDate } },
-                { server: { status: 'OFFLINE' } }
+                { startedAt: { lt: timeoutThreshold } }, // Rulat de prea mult timp
+                { server: { lastSeen: { lt: offlineThreshold } } } // Server offline
             ]
         },
         include: { server: true }
     });
 
-    if (staleAudits.length === 0) return 0;
-
     // Marcare audituri blocate ca FAILED si notificare frontend
-    for (const audit of staleAudits) {
+    for (const audit of stuckAudits) {
         await prisma.auditRun.update({
             where: { id: audit.id },
             data: {
                 status: 'FAILED',
                 completedAt: new Date(),
+                score: 0 // Penalizare
             }
         });
 
-        // Broadcast status change via WebSocket
+        // Notificare utilizator agent offline
         notificationService.broadcastAuditStatus(audit.id, 'FAILED', audit.serverId);
 
-        // Broadcast activity pentru feed
+        // Difuzare activitate pentru feed
         notificationService.broadcastActivity(
             'System',
             'AUDIT_FAILED',

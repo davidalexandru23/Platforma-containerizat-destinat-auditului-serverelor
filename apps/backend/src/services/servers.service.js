@@ -59,7 +59,7 @@ async function findById(id, userId, userRole) {
     return server;
 }
 
-async function create(data) {
+async function create(data, userId) {
     const server = await prisma.server.create({
         data: {
             name: data.name,
@@ -77,6 +77,17 @@ async function create(data) {
         update: { enrollToken, agentToken: null },
     });
 
+    // Daca avem userId (creator), ii dam permisiuni complete automat
+    if (userId) {
+        await prisma.permission.create({
+            data: {
+                userId,
+                serverId: server.id,
+                capabilities: ['VIEW', 'AUDIT', 'MANAGE'],
+            },
+        });
+    }
+
     return { ...server, enrollmentToken: enrollToken };
 }
 
@@ -87,9 +98,12 @@ async function update(id, data) {
         throw new NotFoundError('Server nu exista');
     }
 
+    // Whitelist campuri permise — previne mass-assignment
+    const { name, hostname, ipAddress, description } = data;
+
     return prisma.server.update({
         where: { id },
-        data,
+        data: { name, hostname, ipAddress, description },
     });
 }
 

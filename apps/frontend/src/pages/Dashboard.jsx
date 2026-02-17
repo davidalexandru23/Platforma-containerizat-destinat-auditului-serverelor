@@ -5,12 +5,9 @@ import api from '../api/client';
 import './Dashboard.css';
 
 function Dashboard() {
-    const [stats, setStats] = useState({
-        totalServers: 0,
-        onlineServers: 0,
-        totalTemplates: 0
-    });
-    const [recentServers, setRecentServers] = useState([]);
+    // State-ul principal - sursa de adevar
+    const [servers, setServers] = useState([]);
+    const [templatesCount, setTemplatesCount] = useState(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -32,23 +29,21 @@ function Dashboard() {
 
         // Ascultare actualizari status servere
         serversSocket.on('servers:status', (data) => {
-            // Actualizare status servere recente
-            setRecentServers(prev => prev.map(server =>
-                server.id === data.serverId
-                    ? { ...server, status: data.status }
-                    : server
-            ));
-            // Recalculare numar online
-            setStats(prev => {
-                const isNowOnline = data.status === 'ONLINE';
-                const wasOnline = recentServers.find(s => s.id === data.serverId)?.status === 'ONLINE';
-                if (isNowOnline !== wasOnline) {
-                    return {
-                        ...prev,
-                        onlineServers: isNowOnline ? prev.onlineServers + 1 : Math.max(0, prev.onlineServers - 1)
-                    };
-                }
-                return prev;
+            setServers(prevServers => {
+                return prevServers.map(server => {
+                    if (server.id === data.serverId) {
+                        return {
+                            ...server,
+                            status: data.status,
+                            riskLevel: data.riskLevel,
+                            agentIdentity: {
+                                ...(server.agentIdentity || {}),
+                                lastSeen: data.lastSeen
+                            }
+                        };
+                    }
+                    return server;
+                });
             });
         });
 
@@ -65,16 +60,11 @@ function Dashboard() {
                 api.get('/templates')
             ]);
 
-            const servers = serversRes.data || [];
-            const templates = templatesRes.data || [];
+            const serversData = serversRes.data || [];
+            const templatesData = templatesRes.data || [];
 
-            setStats({
-                totalServers: servers.length,
-                onlineServers: servers.filter(s => s.status === 'online' || s.status === 'ONLINE').length,
-                totalTemplates: templates.length
-            });
-
-            setRecentServers(servers.slice(0, 5));
+            setServers(serversData);
+            setTemplatesCount(templatesData.length);
         } catch (error) {
             console.error('Error loading dashboard:', error);
         } finally {
@@ -92,9 +82,17 @@ function Dashboard() {
         });
     };
 
+    // Calcul valori derivate
+    const onlineServersCount = servers.filter(
+        s => s.status === 'online' || s.status === 'ONLINE'
+    ).length;
+
+    // Luam primele 5 servere (presupunand ca API-ul le returneaza sortate, sau putem sorta aici)
+    const recentServers = servers.slice(0, 5);
+
     return (
         <div className="dashboard-page">
-            {/* Page Header */}
+            {/* Antet Pagina */}
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Dashboard</h1>
@@ -102,17 +100,17 @@ function Dashboard() {
                 </div>
             </div>
 
-            {/* Dashboard Grid Layout */}
+            {/* Layout Grid */}
             <div className="dashboard-grid">
-                {/* Left Column */}
+                {/* Coloana Stanga */}
                 <div className="dashboard-main">
-                    {/* Metrics Grid */}
+                    {/* Grila Metrici */}
                     <div className="grid grid-3" style={{ marginBottom: '2rem' }}>
                         <div className="metric-card">
                             <div className="metric-header">
                                 <div>
                                     <p className="metric-label">Total Servere</p>
-                                    <h3 className="metric-value">{loading ? '-' : stats.totalServers}</h3>
+                                    <h3 className="metric-value">{loading ? '-' : servers.length}</h3>
                                 </div>
                                 <span className="material-symbols-outlined" style={{ fontSize: '32px', color: 'var(--primary)', opacity: 0.5 }}>dns</span>
                             </div>
@@ -122,7 +120,7 @@ function Dashboard() {
                             <div className="metric-header">
                                 <div>
                                     <p className="metric-label">Servere Online</p>
-                                    <h3 className="metric-value">{loading ? '-' : stats.onlineServers}</h3>
+                                    <h3 className="metric-value">{loading ? '-' : onlineServersCount}</h3>
                                 </div>
                                 <span className="metric-change positive" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <div style={{
@@ -141,14 +139,14 @@ function Dashboard() {
                             <div className="metric-header">
                                 <div>
                                     <p className="metric-label">Template-uri Audit</p>
-                                    <h3 className="metric-value">{loading ? '-' : stats.totalTemplates}</h3>
+                                    <h3 className="metric-value">{loading ? '-' : templatesCount}</h3>
                                 </div>
                                 <span className="material-symbols-outlined" style={{ fontSize: '32px', color: 'var(--info)', opacity: 0.5 }}>fact_check</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Recent Servers */}
+                    {/* Servere Recente */}
                     <div className="card">
                         <div className="card-header">
                             <h3 className="card-title">Servere Recente</h3>
@@ -209,7 +207,7 @@ function Dashboard() {
                 </div>
             </div>
 
-            {/* Quick Actions */}
+            {/* Actiuni Rapide */}
             <div className="grid grid-3" style={{ marginTop: '1.5rem' }}>
                 <Link to="/servers" className="card" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{ width: '48px', height: '48px', background: 'var(--primary-light)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

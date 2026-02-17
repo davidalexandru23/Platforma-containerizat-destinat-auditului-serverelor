@@ -22,7 +22,7 @@ const auditLog = (action, resource) => {
 async function logAction(req, action, resource) {
     try {
         // Excludere logare date sensibile
-        const sensitiveEndpoints = ['/auth/login', '/auth/register', '/auth/refresh'];
+        const sensitiveEndpoints = ['/auth/login', '/auth/register', '/auth/refresh', '/users'];
         const isSensitive = sensitiveEndpoints.some(ep => req.originalUrl.includes(ep));
         const resourceId = req.params.id || req.params.serverId || null;
 

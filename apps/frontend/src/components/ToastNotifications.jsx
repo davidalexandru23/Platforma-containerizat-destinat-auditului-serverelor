@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './ToastNotifications.css';
 
 /**
@@ -25,7 +26,7 @@ function ToastNotifications({ notifications, onDismiss }) {
                         <div className="toast-title">{toast.title}</div>
                         <div className="toast-message">{toast.message}</div>
                         {toast.link && (
-                            <a href={toast.link} className="toast-link">Vezi detalii &rarr;</a>
+                            <Link to={toast.link} className="toast-link">Vezi detalii &rarr;</Link>
                         )}
                     </div>
                     <button className="toast-close" onClick={() => onDismiss(toast.id)}>

@@ -17,7 +17,7 @@ async function register(data) {
         throw new ConflictError('Email deja inregistrat');
     }
 
-    // hash parola
+    // Hash parola
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Initializare roluri daca nu exista
@@ -33,7 +33,7 @@ async function register(data) {
         throw new Error('Rol inexistent');
     }
 
-    // creeaza user
+    // Creare utilizator
     const user = await prisma.user.create({
         data: {
             email,
@@ -82,7 +82,7 @@ async function login(data) {
         throw new UnauthorizedError('Credentiale invalide');
     }
 
-    // genereaza tokens
+    // Generare token-uri
     const tokens = await generateTokens(user.id, user.email, user.role.name);
 
     log.info(`User login: ${email}`);
@@ -122,7 +122,7 @@ async function refresh(refreshToken) {
         throw new UnauthorizedError('Refresh token expirat');
     }
 
-    // sterge vechiul refresh token
+    // Stergere vechiul token de reimprospatare
     await prisma.refreshToken.delete({
         where: { id: storedToken.id },
     });

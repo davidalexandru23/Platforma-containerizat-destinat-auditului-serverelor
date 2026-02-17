@@ -17,23 +17,23 @@ async function seedTemplates() {
 
         for (const pt of predefinedTemplates) {
             try {
-                // Verificare daca template-ul exista dupa nume
-                const existing = await prisma.template.findFirst({
-                    where: { name: pt.name }
-                });
+                // Import sau Update (verificare versiune)
+                console.log(`[SEEDER_DEBUG] Processing template: "${pt.name}" | File Version: ${pt.version}`);
+                const content = await templatesService.getPredefinedTemplateContent(pt.filename);
+                const result = await templatesService.importOrUpdatePredefinedTemplate(content);
 
-                if (existing) {
-                    log.info(`Template "${pt.name}" already exists. Skipping.`);
-                    continue;
+                if (result.updated) {
+                    log.success(`Template "${pt.name}" updated to version ${result.version || 'new'}`);
+                    seededCount++;
+                } else if (result.skipped) {
+                    log.info(`Template "${pt.name}" already up to date.`);
+                } else {
+                    log.success(`Template "${pt.name}" seeded successfully.`);
+                    seededCount++;
                 }
 
-                log.info(`Seeding template: ${pt.name} (${pt.filename})`);
-                const content = await templatesService.getPredefinedTemplateContent(pt.filename);
-
-                await templatesService.importJson(content, null); // CreatedBy = null (Sistem)
-                seededCount++;
-
             } catch (e) {
+                console.error(`[SEEDER_ERROR] Failed to seed template ${pt.filename}:`, e);
                 log.error(`Failed to seed template ${pt.filename}: ${e.message}`);
             }
         }

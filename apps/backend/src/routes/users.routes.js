@@ -14,7 +14,7 @@ const router = express.Router();
  */
 router.get('/',
     authenticate,
-    authorize('ADMIN'),
+    authorize('ADMIN', 'AUDITOR'),
     async (req, res, next) => {
         try {
             const users = await usersService.findAll();
@@ -42,8 +42,8 @@ router.post('/',
             if (!email || !password || !name || !roleId) {
                 return res.status(400).json({ message: 'Toate campurile sunt obligatorii' });
             }
-            if (password.length < 6) {
-                return res.status(400).json({ message: 'Parola trebuie sa aiba minim 6 caractere' });
+            if (password.length < 8) {
+                return res.status(400).json({ message: 'Parola trebuie sa aiba minim 8 caractere' });
             }
 
             const newUser = await usersService.create(req.body);

@@ -49,12 +49,14 @@ async function calculateScoring(auditRunId) {
     // Calcul manual
     const totalManual = activeManualTasks.length;
     const completedManual = activeManualTasks.filter(t => t.status === 'COMPLETED').length;
+    const rejectedManual = activeManualTasks.filter(t => t.status === 'REJECTED').length;
     const pendingManual = activeManualTasks.filter(
         t => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
     ).length;
 
+    // manualCompletionPercent = task-uri finalizate cu succes din total
     const manualCompletionPercent = totalManual > 0
-        ? (completedManual / totalManual) * 100
+        ? ((completedManual) / totalManual) * 100
         : 100;
 
     // Determinare status general
@@ -68,7 +70,11 @@ async function calculateScoring(auditRunId) {
     else if (pendingManual > 0) {
         overallStatus = 'PARTIALLY_COMPLIANT';
     }
-    // Alte esecuri
+    // Regula: Task-uri manuale respinse
+    else if (rejectedManual > 0) {
+        overallStatus = manualCompletionPercent < 80 ? 'NON_COMPLIANT' : 'PARTIALLY_COMPLIANT';
+    }
+    // Alte esecuri automate
     else if (failedAutomated > 0) {
         if (automatedCompliancePercent >= 80) {
             overallStatus = 'PARTIALLY_COMPLIANT';
@@ -88,6 +94,7 @@ async function calculateScoring(auditRunId) {
             criticalFails,
             totalManual,
             completedManual,
+            rejectedManual,
             pendingManual,
         },
     };

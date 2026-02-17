@@ -14,7 +14,7 @@ export default function ManualCheckEditor({ check, onChange }) {
 
     return (
         <div className="manual-check-editor" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Titlu - gestionat de parinte de obicei, dar poate fi aici. Parintele gestioneaza Titlu & ID */}
+            {/* Titlu gestionat de parinte (Titlu si ID) */}
 
             <div className="form-group">
                 <label className="form-label">Instructiuni pentru Auditor</label>

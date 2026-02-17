@@ -17,7 +17,7 @@ var (
 	enrollToken string
 )
 
-// Injectare versiune la compilare (-ldflags -X main.agentVersion=...)
+// Injectare versiune compilare (-ldflags)
 var agentVersion = "dev"
 
 func main() {
@@ -90,11 +90,7 @@ Pentru productie, utilizare serviciu systemd:
 			if os.Geteuid() != 0 {
 				fmt.Println("ATENTIE: Rulare ca non-root. Unele metrici/verificari pot fi indisponibile.")
 			}
-			cfg, err := config.Load(cfgFile)
-			if err != nil {
-				return fmt.Errorf("eroare la incarcarea configurarii: %w", err)
-			}
-			return runner.Run(cfg, agentVersion)
+			return runner.Run(cfgFile)
 		},
 	}
 	rootCmd.AddCommand(runCmd)
@@ -133,7 +129,7 @@ Pentru productie, utilizare serviciu systemd:
 	}
 	rootCmd.AddCommand(versionCmd)
 
-	// Comanda testare - pentru depanare
+	// Comanda testare (debug)
 	testCmd := &cobra.Command{
 		Use:   "test",
 		Short: "Testare colectare metrici si inventar",

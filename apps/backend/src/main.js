@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-// Fix serializare BigInt pentru JSON
+// Corectare serializare BigInt pentru JSON
 BigInt.prototype.toJSON = function () {
     return Number(this);
 };
@@ -47,7 +47,7 @@ app.use(cors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
     credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Fisiere statice pentru agent
 app.use('/downloads', express.static(path.join(__dirname, '../public')));
@@ -81,12 +81,12 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// health check
+// Verificare stare sistem
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// rute
+// Rute API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/servers', serversRoutes);
@@ -94,7 +94,7 @@ app.use('/api/agent', agentRoutes);
 app.use('/api/templates', templatesRoutes);
 app.use('/api/audit', auditRoutes);
 
-// Manipulare erori
+// Gestionare erori
 app.use(errorHandler);
 
 // Initializare WebSocket
@@ -107,7 +107,7 @@ export { io };
 const PORT = process.env.BACKEND_PORT || 3000;
 
 server.listen(PORT, async () => {
-    console.log('Se ruleaza sarcina cleanup audit...'); log('=== BitTrail API Server ===');
+    console.log('Se ruleaza sarcina cleanup audit...'); log.info('=== BitTrail API Server ===');
     console.log('');
 
     // Verificare conexiune baza de date
@@ -128,11 +128,11 @@ server.listen(PORT, async () => {
     log.info(`WebSocket: ws://localhost:${PORT}`);
     console.log('');
 
-    // Pornire job curatare (fiecare 5 minute)
+    // Pornire sarcina curatare (la 5 minute)
     const auditService = await import('./services/audit.service.js');
     const serversService = await import('./services/servers.service.js');
 
-    // Curatare audituri expirate (fiecare 5 minute)
+    // Curatare audituri expirate (la 5 minute)
     setInterval(async () => {
         try {
             const count = await auditService.cleanupStaleAudits();
@@ -144,7 +144,7 @@ server.listen(PORT, async () => {
         }
     }, 5 * 60 * 1000);
 
-    // Verificare servere offline (fiecare 60 secunde)
+    // Verificare servere offline (la 60 secunde)
     // Rulare imediata la pornire pentru curatare statusuri vechi
     try {
         const count = await serversService.checkOfflineServers();
@@ -167,7 +167,7 @@ server.listen(PORT, async () => {
     }, 60 * 1000);
 });
 
-// Oprire gratiosa
+// Oprire controlata
 process.on('SIGTERM', async () => {
     log.warn('SIGTERM primit, oprire...');
     await prisma.$disconnect();

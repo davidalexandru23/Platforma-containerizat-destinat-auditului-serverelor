@@ -15,6 +15,17 @@ type Config struct {
 	MetricsInterval    int `yaml:"metrics_interval"`     // secunde
 	InventoryInterval  int `yaml:"inventory_interval"`   // secunde
 	AuditCheckInterval int `yaml:"audit_check_interval"` // secunde
+
+	// Configurare PKI
+	KeyFile        string `yaml:"key_file"`
+	CertFile       string `yaml:"cert_file"`
+	BackendKeyFile string `yaml:"backend_key_file"`
+
+	// Securitate / PKI
+	AgentKeyPath   string `yaml:"agent_key_path"`
+	AgentCertPath  string `yaml:"agent_cert_path"`
+	CACertPath     string `yaml:"ca_cert_path"`
+	BackendPubPath string `yaml:"backend_pub_path"`
 }
 
 func Load(path string) (*Config, error) {
@@ -28,7 +39,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// Defaults
+	// Valori implicite
 	if cfg.MetricsInterval == 0 {
 		cfg.MetricsInterval = 10
 	}
@@ -37,6 +48,20 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.AuditCheckInterval == 0 {
 		cfg.AuditCheckInterval = 5
+	}
+
+	// Valori implicite securitate
+	if cfg.AgentKeyPath == "" {
+		cfg.AgentKeyPath = "certs/agent.key"
+	}
+	if cfg.AgentCertPath == "" {
+		cfg.AgentCertPath = "certs/agent.crt"
+	}
+	if cfg.CACertPath == "" {
+		cfg.CACertPath = "certs/ca.crt"
+	}
+	if cfg.BackendPubPath == "" {
+		cfg.BackendPubPath = "certs/backend_pub.pem"
 	}
 
 	return &cfg, nil

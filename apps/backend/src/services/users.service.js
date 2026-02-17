@@ -62,7 +62,7 @@ async function findById(id) {
             email: true,
             firstName: true,
             lastName: true,
-            role: { select: { id: true, name: true, permissions: true } },
+            role: { select: { id: true, name: true } },
             permissions: { select: { id: true, serverId: true, capabilities: true, expiresAt: true } },
             createdAt: true,
             updatedAt: true,
@@ -108,7 +108,7 @@ async function deleteUser(id) {
 
 async function getRoles() {
     return prisma.role.findMany({
-        select: { id: true, name: true, description: true, permissions: true },
+        select: { id: true, name: true, description: true },
     });
 }
 

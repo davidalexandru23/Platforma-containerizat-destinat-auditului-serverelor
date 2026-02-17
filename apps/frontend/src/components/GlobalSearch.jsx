@@ -23,7 +23,7 @@ function GlobalSearch() {
         { name: 'Utilizatori', path: '/users', icon: 'group', keywords: ['utilizatori', 'users', 'conturi', 'admin'], adminOnly: true },
     ];
 
-    // ... (rest of code)
+
 
 
 

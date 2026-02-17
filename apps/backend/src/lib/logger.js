@@ -1,4 +1,4 @@
-// Logger simplu pentru debug
+// logger simplu pentru depanare
 const colors = {
     reset: '\x1b[0m',
     dim: '\x1b[2m',
@@ -61,7 +61,7 @@ const log = {
     },
 };
 
-// Middleware pentru logare cereri HTTP
+// Middleware pentru logger cereri HTTP
 const requestLogger = (req, res, next) => {
     const start = Date.now();
 

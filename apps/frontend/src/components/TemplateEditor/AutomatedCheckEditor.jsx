@@ -1,15 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../api/client';
+import { validateCommandFrontend } from '../../utils/commandValidator';
 
 export default function AutomatedCheckEditor({ check, onChange }) {
     const [servers, setServers] = useState([]);
     const [testServerId, setTestServerId] = useState('');
     const [testResult, setTestResult] = useState(null);
     const [testing, setTesting] = useState(false);
+    // Stare validare comanda
+    const [cmdValidation, setCmdValidation] = useState({ allowed: true, severity: 'OK', reasons: [] });
+    const debounceRef = useRef(null);
 
     useEffect(() => {
         loadServers();
     }, []);
+
+    // Validare comanda cu debounce 300ms
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            const result = validateCommandFrontend(check.command);
+            setCmdValidation(result);
+        }, 300);
+        return () => clearTimeout(debounceRef.current);
+    }, [check.command]);
 
     const loadServers = async () => {
         try {
@@ -65,6 +79,9 @@ export default function AutomatedCheckEditor({ check, onChange }) {
         }
     };
 
+    // Comanda blocata sau respinsa
+    const isCommandBlocked = !cmdValidation.allowed;
+
     return (
         <div className="automated-check-editor" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {/* Introducere Comanda */}
@@ -76,8 +93,48 @@ export default function AutomatedCheckEditor({ check, onChange }) {
                     onChange={e => handleChange('command', e.target.value)}
                     placeholder="ex: grep 'PermitRootLogin' /etc/ssh/sshd_config"
                     rows={3}
-                    style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem' }}
+                    style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.875rem',
+                        borderColor: isCommandBlocked ? 'var(--danger)' : undefined,
+                        borderWidth: isCommandBlocked ? '2px' : undefined,
+                    }}
                 />
+                {/* Banner validare comanda */}
+                {isCommandBlocked && (
+                    <div style={{
+                        marginTop: '0.5rem',
+                        padding: '0.5rem 0.75rem',
+                        background: cmdValidation.severity === 'BLOCKED'
+                            ? 'rgba(239, 68, 68, 0.1)'
+                            : 'rgba(245, 158, 11, 0.1)',
+                        border: `1px solid ${cmdValidation.severity === 'BLOCKED' ? 'var(--danger)' : '#f59e0b'}`,
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '0.5rem',
+                    }}>
+                        <span className="material-symbols-outlined" style={{
+                            fontSize: '18px',
+                            color: cmdValidation.severity === 'BLOCKED' ? 'var(--danger)' : '#f59e0b',
+                            flexShrink: 0,
+                            marginTop: '1px'
+                        }}>
+                            {cmdValidation.severity === 'BLOCKED' ? 'block' : 'warning'}
+                        </span>
+                        <div>
+                            <strong style={{ color: cmdValidation.severity === 'BLOCKED' ? 'var(--danger)' : '#f59e0b' }}>
+                                {cmdValidation.severity === 'BLOCKED' ? 'Comanda interzisa' : 'Comanda nesigura'}
+                            </strong>
+                            <ul style={{ margin: '0.25rem 0 0 1rem', padding: 0, listStyle: 'disc' }}>
+                                {cmdValidation.reasons.map((r, i) => (
+                                    <li key={i}>{r}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -191,7 +248,7 @@ export default function AutomatedCheckEditor({ check, onChange }) {
                     <button
                         className="btn btn-secondary"
                         onClick={handleRunTest}
-                        disabled={testing || !testServerId || !check.command}
+                        disabled={testing || !testServerId || !check.command || isCommandBlocked}
                     >
                         {testing ? <div className="spinner" style={{ width: 14, height: 14 }}></div> : 'Ruleaza'}
                     </button>

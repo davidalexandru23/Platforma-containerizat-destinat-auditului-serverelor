@@ -1,5 +1,6 @@
 {
   "devDependencies": {
+    "@prisma/engines": "^7.4.0",
     "prisma": "^5.22.0"
   },
   "dependencies": {

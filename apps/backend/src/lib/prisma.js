@@ -1,13 +1,13 @@
-// Prisma Client pentru Prisma 7 cu driver adapter PostgreSQL
+// Client Prisma pentru Prisma 7 cu adaptor PostgreSQL
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
-// Creare adapter PostgreSQL
+// Creare adaptor PostgreSQL
 const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL
 });
 
-// Instantiere Prisma Client cu adapter
+// Instantiere Client Prisma cu adaptor
 const prisma = new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development'

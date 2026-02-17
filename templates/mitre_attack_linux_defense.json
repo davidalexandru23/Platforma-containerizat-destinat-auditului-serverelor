@@ -3,8 +3,8 @@
     "metadata": {
         "name": "MITRE ATT&CK - Linux Server Defensive Coverage (Telemetry + Detections)",
         "description": "Template orientat pe acoperire defensiva MITRE ATT&CK pentru servere Linux. Include controale automatizabile prin agent (read-only) pentru a valida logging, auditd, procese, retea, integritate, si integrare cu SIEM/agent EDR.",
-        "version": "1.0.0",
-        "type": "CUSTOM",
+        "version": "1.1.0",
+        "type": "MITRE",
         "author": "BitTrail Platform",
         "createdAt": "2026-01-27T00:00:00Z"
     },
@@ -13,25 +13,31 @@
             "controlId": "TA0001-T1078",
             "title": "Valid Accounts: monitorizare logins si conturi privilegiate",
             "category": "Initial Access / Credential Abuse",
-            "description": "Tactic: TA0001, Technique: T1078 (Valid Accounts). Exista vizibilitate pe autentificari reusite/esuat si pe folosirea conturilor privilegiate (sudo/su).",
+            "description": "Tactic: TA0001, Technique: T1078 (Valid Accounts). Exista vizibilitate pe autentificari reusite/esuate si pe folosirea conturilor privilegiate (sudo/su).",
             "severity": "CRITICAL",
             "automatedChecks": [
                 {
                     "checkId": "TA0001-T1078.a",
-                    "title": "auth_events_last_200",
-                    "command": "journalctl --no-pager -n 200 | grep -iE 'sshd|login|pam_unix|authentication|Failed password|Accepted password|Accepted publickey' | tail -n 200 || true",
+                    "title": "Auth events logging",
+                    "command": "AUTH_EVENTS=$(journalctl --no-pager -n 500 2>/dev/null | grep -ciE 'sshd|login|pam_unix|authentication|Failed password|Accepted'); echo \"AUTH_EVENTS_FOUND=$AUTH_EVENTS\"; if [ \"$AUTH_EVENTS\" -gt 0 ]; then echo 'AUTH_LOGGING=ACTIVE'; echo 'CHECK=PASS'; else echo 'AUTH_LOGGING=NONE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0001-T1078.b",
-                    "title": "sudo_events_last_200",
-                    "command": "journalctl --no-pager -n 500 | grep -iE 'sudo' | tail -n 200 || true",
+                    "title": "Sudo logging active",
+                    "command": "SUDO_EVENTS=$(journalctl --no-pager -n 500 2>/dev/null | grep -ci 'sudo'); echo \"SUDO_EVENTS=$SUDO_EVENTS\"; if [ \"$SUDO_EVENTS\" -gt 0 ]; then echo 'SUDO_LOGGING=ACTIVE'; echo 'CHECK=PASS'; else echo 'SUDO_LOGGING=NONE'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0001-T1078.c",
-                    "title": "privileged_groups",
-                    "command": "getent group sudo 2>/dev/null || true; getent group wheel 2>/dev/null || true",
+                    "title": "Privileged groups size",
+                    "command": "TOTAL=$(getent group sudo wheel 2>/dev/null | cut -d: -f4 | tr ',' '\\n' | sort -u | grep -c '.'); echo \"PRIVILEGED_USERS=$TOTAL\"; getent group sudo wheel 2>/dev/null; if [ \"$TOTAL\" -le 5 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -56,20 +62,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0001-T1190.a",
-                    "title": "listening_ports",
-                    "command": "ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null || true",
+                    "title": "Listening ports inventory",
+                    "command": "LISTEN_COUNT=$(ss -lntup 2>/dev/null | grep -c LISTEN); echo \"LISTENING_PORTS=$LISTEN_COUNT\"; ss -lntup 2>/dev/null | head -n 30; if [ \"$LISTEN_COUNT\" -le 20 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0001-T1190.b",
-                    "title": "nginx_access_logs",
-                    "command": "ls -la /var/log/nginx 2>/dev/null || true; for f in /var/log/nginx/access.log /var/log/nginx/error.log; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 120 \"$f\"; }; done 2>/dev/null || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "TA0001-T1190.c",
-                    "title": "apache_access_logs",
-                    "command": "ls -la /var/log/apache2 2>/dev/null || true; for f in /var/log/apache2/access.log /var/log/apache2/error.log; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 120 \"$f\"; }; done 2>/dev/null || true",
+                    "title": "Web server access logs",
+                    "command": "HAS_LOGS='NO'; for f in /var/log/nginx/access.log /var/log/apache2/access.log /var/log/httpd/access_log; do if [ -f \"$f\" ]; then HAS_LOGS='YES'; SIZE=$(stat -c '%s' \"$f\" 2>/dev/null); echo \"WEBLOG=$f SIZE=$SIZE\"; fi; done; echo \"WEB_LOGS=$HAS_LOGS\"; if [ \"$HAS_LOGS\" = 'YES' ]; then echo 'CHECK=PASS'; else if ! command -v nginx >/dev/null 2>&1 && ! command -v apache2ctl >/dev/null 2>&1; then echo 'NO_WEB_SERVER'; echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -94,14 +98,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0001-T1110.a",
-                    "title": "faillock_conf",
-                    "command": "cat /etc/security/faillock.conf 2>/dev/null || true; grep -R \"pam_faillock\" -n /etc/pam.d 2>/dev/null || true",
+                    "title": "Brute force protection",
+                    "command": "PROTECTION='NONE'; if command -v fail2ban-client >/dev/null 2>&1; then PROTECTION='fail2ban'; fail2ban-client status 2>/dev/null | head -n 5; elif [ -f /etc/security/faillock.conf ]; then PROTECTION='faillock'; grep -v '^#' /etc/security/faillock.conf 2>/dev/null | grep -v '^$'; elif grep -q 'pam_faillock\\|pam_tally2' /etc/pam.d/* 2>/dev/null; then PROTECTION='pam_module'; fi; echo \"BRUTE_FORCE_PROTECTION=$PROTECTION\"; if [ \"$PROTECTION\" != 'NONE' ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0001-T1110.b",
-                    "title": "fail2ban_status",
-                    "command": "if command -v fail2ban-client >/dev/null 2>&1; then fail2ban-client status; fail2ban-client status sshd 2>/dev/null || true; else echo \"SKIP_FAIL2BAN\"; fi",
+                    "title": "Failed password recent count",
+                    "command": "FAILURES=$(journalctl --no-pager -n 1000 2>/dev/null | grep -ci 'Failed password'); echo \"RECENT_FAILED_PASSWORDS=$FAILURES\"; if [ \"$FAILURES\" -le 100 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -116,20 +124,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0003-T1053.a",
-                    "title": "cron_dirs",
-                    "command": "ls -la /etc/cron.* 2>/dev/null || true; ls -la /var/spool/cron 2>/dev/null || true",
+                    "title": "Cron jobs inventory",
+                    "command": "CRON_FILES=0; for d in /etc/cron.d /etc/cron.daily /etc/cron.weekly /etc/cron.hourly /etc/cron.monthly; do [ -d \"$d\" ] && CRON_FILES=$((CRON_FILES + $(ls -1 \"$d\" 2>/dev/null | wc -l))); done; echo \"CRON_FILES=$CRON_FILES\"; ls -la /var/spool/cron/crontabs 2>/dev/null | head -n 10; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0003-T1053.b",
-                    "title": "systemd_timers",
-                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-timers --all --no-pager; fi",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "TA0003-T1053.c",
-                    "title": "crontab_root",
-                    "command": "crontab -l 2>/dev/null || true; cat /etc/crontab 2>/dev/null || true",
+                    "title": "Systemd timers inventory",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then TIMERS=$(systemctl list-timers --all --no-pager 2>/dev/null | grep -c 'timer'); echo \"SYSTEMD_TIMERS=$TIMERS\"; systemctl list-timers --all --no-pager 2>/dev/null | head -n 20; echo 'CHECK=PASS'; else echo 'SYSTEMCTL=NOT_AVAILABLE'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -154,14 +160,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0003-T1543.a",
-                    "title": "systemd_units_custom",
-                    "command": "ls -la /etc/systemd/system 2>/dev/null || true; find /etc/systemd/system -maxdepth 2 -type f -name '*.service' -o -name '*.timer' 2>/dev/null | head -n 200 || true",
+                    "title": "Custom systemd units",
+                    "command": "CUSTOM_UNITS=$(find /etc/systemd/system -maxdepth 2 -type f \\( -name '*.service' -o -name '*.timer' \\) 2>/dev/null | wc -l); echo \"CUSTOM_SYSTEMD_UNITS=$CUSTOM_UNITS\"; find /etc/systemd/system -maxdepth 2 -type f \\( -name '*.service' -o -name '*.timer' \\) 2>/dev/null | head -n 30; if [ \"$CUSTOM_UNITS\" -le 30 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0003-T1543.b",
-                    "title": "enabled_services",
-                    "command": "if command -v systemctl >/dev/null 2>&1; then systemctl list-unit-files --type=service --state=enabled --no-pager; fi",
+                    "title": "Enabled services count",
+                    "command": "if command -v systemctl >/dev/null 2>&1; then ENABLED=$(systemctl list-unit-files --type=service --state=enabled --no-pager 2>/dev/null | grep -c 'enabled'); echo \"ENABLED_SERVICES=$ENABLED\"; if [ \"$ENABLED\" -le 40 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi; else echo 'SYSTEMCTL=NOT_AVAILABLE'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -176,14 +186,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0004-T1548.a",
-                    "title": "sudoers_full",
-                    "command": "cat /etc/sudoers 2>/dev/null || true; ls -la /etc/sudoers.d 2>/dev/null || true; for f in /etc/sudoers.d/*; do [ -f \"$f\" ] && { echo \"--- $f\"; cat \"$f\"; }; done 2>/dev/null || true",
+                    "title": "NOPASSWD in sudoers",
+                    "command": "NOPASSWD=$(grep -rn 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -cv '^#'); echo \"NOPASSWD_ENTRIES=$NOPASSWD\"; if [ \"$NOPASSWD\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; grep -rn 'NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null | grep -v '^#'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0004-T1548.b",
-                    "title": "suid_sgid_files",
-                    "command": "find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | head -n 250 || true",
+                    "title": "SUID/SGID files count",
+                    "command": "COUNT=$(find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | wc -l); echo \"SUID_SGID_FILES=$COUNT\"; if [ \"$COUNT\" -le 30 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; find / -xdev \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null | head -n 30; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -208,20 +222,26 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0005-T1562.a",
-                    "title": "logging_services_status",
-                    "command": "systemctl status systemd-journald --no-pager 2>/dev/null || true; systemctl status rsyslog --no-pager 2>/dev/null || true; systemctl status auditd --no-pager 2>/dev/null || true",
+                    "title": "Logging services active",
+                    "command": "SCORE=0; systemctl is-active systemd-journald >/dev/null 2>&1 && SCORE=$((SCORE+1)) && echo 'JOURNALD=ACTIVE'; systemctl is-active rsyslog >/dev/null 2>&1 && SCORE=$((SCORE+1)) && echo 'RSYSLOG=ACTIVE'; systemctl is-active auditd >/dev/null 2>&1 && SCORE=$((SCORE+1)) && echo 'AUDITD=ACTIVE'; echo \"LOGGING_SERVICES_ACTIVE=$SCORE/3\"; if [ \"$SCORE\" -ge 2 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0005-T1562.b",
-                    "title": "auditd_rules",
-                    "command": "auditctl -s 2>/dev/null || true; auditctl -l 2>/dev/null | head -n 220 || true; ls -la /etc/audit/rules.d 2>/dev/null || true",
+                    "title": "Auditd rules count",
+                    "command": "RULES=$(auditctl -l 2>/dev/null | wc -l); echo \"AUDIT_RULES=$RULES\"; if [ \"$RULES\" -gt 0 ]; then echo 'CHECK=PASS'; auditctl -l 2>/dev/null | head -n 20; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0005-T1562.c",
-                    "title": "agent_presence_common",
-                    "command": "ps aux 2>/dev/null | grep -iE 'osquery|elastic-agent|falcon|crowdstrike|sentinel|defender|wazuh|sysmon' | grep -v grep | head -n 50 || true",
+                    "title": "EDR/security agents running",
+                    "command": "AGENTS=''; for p in osqueryd elastic-agent falcon-sensor wazuh-agentd; do pgrep -x \"$p\" >/dev/null 2>&1 && AGENTS=\"$AGENTS $p\"; done; if [ -n \"$AGENTS\" ]; then echo \"SECURITY_AGENTS=$AGENTS\"; echo 'CHECK=PASS'; else echo 'SECURITY_AGENTS=NONE'; echo 'CHECK=INFO'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -246,14 +266,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0005-T1070.a",
-                    "title": "logrotate_config",
-                    "command": "cat /etc/logrotate.conf 2>/dev/null || true; ls -la /etc/logrotate.d 2>/dev/null || true",
+                    "title": "Logrotate configured",
+                    "command": "if [ -f /etc/logrotate.conf ]; then echo 'LOGROTATE=CONFIGURED'; echo 'CHECK=PASS'; else echo 'LOGROTATE=MISSING'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0005-T1070.b",
-                    "title": "varlog_recent",
-                    "command": "find /var/log -maxdepth 2 -type f -printf '%TY-%Tm-%Td %TH:%TM %p %s\\n' 2>/dev/null | sort -r | head -n 120 || true",
+                    "title": "Log files freshness",
+                    "command": "RECENT=$(find /var/log -maxdepth 2 -type f -mmin -60 2>/dev/null | wc -l); TOTAL=$(find /var/log -maxdepth 2 -type f 2>/dev/null | wc -l); echo \"LOG_FILES_TOTAL=$TOTAL\"; echo \"LOG_FILES_RECENT_1H=$RECENT\"; if [ \"$RECENT\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -278,14 +302,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0006-T1003.a",
-                    "title": "shadow_perms",
-                    "command": "for f in /etc/shadow /etc/gshadow; do [ -f \"$f\" ] && stat -c '%n %U:%G %a' \"$f\"; done 2>/dev/null || true",
+                    "title": "Shadow file permissions",
+                    "command": "SCORE=0; for f in /etc/shadow /etc/gshadow; do if [ -f \"$f\" ]; then PERM=$(stat -c '%a' \"$f\" 2>/dev/null); OWNER=$(stat -c '%U' \"$f\" 2>/dev/null); echo \"$f owner=$OWNER perm=$PERM\"; if [ \"$OWNER\" = 'root' ] && [ \"$PERM\" = '640' ] || [ \"$PERM\" = '600' ] || [ \"$PERM\" = '000' ]; then SCORE=$((SCORE+1)); fi; fi; done; echo \"SHADOW_PROTECTED=$SCORE\"; if [ \"$SCORE\" -ge 1 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0006-T1003.b",
-                    "title": "audit_shadow_rules_presence",
-                    "command": "grep -R \"\\/etc\\/shadow\\|\\/etc\\/gshadow\" -n /etc/audit/rules.d 2>/dev/null || true",
+                    "title": "Audit rules for shadow files",
+                    "command": "RULES=$(grep -rcE '/etc/shadow|/etc/gshadow' /etc/audit/rules.d 2>/dev/null | grep -cv ':0$'); echo \"SHADOW_AUDIT_RULES=$RULES\"; if [ \"$RULES\" -gt 0 ]; then grep -rE '/etc/shadow|/etc/gshadow' /etc/audit/rules.d 2>/dev/null; echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -310,14 +338,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0007-T1082.a",
-                    "title": "audit_execve_signal",
-                    "command": "auditctl -l 2>/dev/null | grep -i execve | head -n 120 || true",
+                    "title": "Audit execve rules",
+                    "command": "EXECVE_RULES=$(auditctl -l 2>/dev/null | grep -ci execve); echo \"EXECVE_AUDIT_RULES=$EXECVE_RULES\"; if [ \"$EXECVE_RULES\" -gt 0 ]; then echo 'CHECK=PASS'; auditctl -l 2>/dev/null | grep -i execve | head -n 10; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0007-T1082.b",
-                    "title": "shell_history_presence",
-                    "command": "for f in /root/.bash_history /home/*/.bash_history; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 60 \"$f\"; }; done 2>/dev/null || true",
+                    "title": "Shell history retention",
+                    "command": "HIST_FILES=0; for f in /root/.bash_history /home/*/.bash_history; do [ -f \"$f\" ] && HIST_FILES=$((HIST_FILES+1)); done 2>/dev/null; echo \"BASH_HISTORY_FILES=$HIST_FILES\"; if [ \"$HIST_FILES\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -332,14 +364,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0007-T1046.a",
-                    "title": "installed_scan_tools",
-                    "command": "command -v nmap 2>/dev/null && nmap --version | head -n 5 || true; command -v masscan 2>/dev/null && masscan --version 2>/dev/null || true; command -v nc 2>/dev/null && nc -h 2>/dev/null | head -n 3 || true",
+                    "title": "Scan tools installed",
+                    "command": "TOOLS=''; command -v nmap >/dev/null 2>&1 && TOOLS=\"$TOOLS nmap\"; command -v masscan >/dev/null 2>&1 && TOOLS=\"$TOOLS masscan\"; command -v nc >/dev/null 2>&1 && TOOLS=\"$TOOLS nc\"; command -v ncat >/dev/null 2>&1 && TOOLS=\"$TOOLS ncat\"; if [ -n \"$TOOLS\" ]; then echo \"SCAN_TOOLS=$TOOLS\"; echo 'CHECK=REVIEW'; else echo 'SCAN_TOOLS=NONE'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0007-T1046.b",
-                    "title": "recent_connections",
-                    "command": "ss -antup 2>/dev/null | head -n 240 || true",
+                    "title": "Established connections count",
+                    "command": "ESTAB=$(ss -antup 2>/dev/null | grep -c ESTAB); echo \"ESTABLISHED_CONNECTIONS=$ESTAB\"; if [ \"$ESTAB\" -le 100 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -354,14 +390,10 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0008-T1021.a",
-                    "title": "sshd_key_settings",
-                    "command": "sshd -T 2>/dev/null | grep -E 'permitrootlogin|passwordauthentication|pubkeyauthentication|allowusers|allowgroups|loglevel|maxauthtries|clientaliveinterval|clientalivecountmax' || true",
-                    "checkType": "COMMAND"
-                },
-                {
-                    "checkId": "TA0008-T1021.b",
-                    "title": "ssh_known_hosts_inventory",
-                    "command": "for f in /root/.ssh/known_hosts /home/*/.ssh/known_hosts; do [ -f \"$f\" ] && { echo \"--- $f\"; tail -n 80 \"$f\"; }; done 2>/dev/null || true",
+                    "title": "SSH hardening score",
+                    "command": "SCORE=0; TOTAL=3; VALUE=$(sshd -T 2>/dev/null | grep -i 'permitrootlogin' | awk '{print $2}'); echo \"PermitRootLogin=$VALUE\"; echo \"$VALUE\" | grep -qiE '^(no|prohibit-password)$' && SCORE=$((SCORE+1)); VALUE=$(sshd -T 2>/dev/null | grep -i 'passwordauthentication' | awk '{print $2}'); echo \"PasswordAuthentication=$VALUE\"; echo \"$VALUE\" | grep -qi 'no' && SCORE=$((SCORE+1)); VALUE=$(sshd -T 2>/dev/null | grep -i 'pubkeyauthentication' | awk '{print $2}'); echo \"PubkeyAuthentication=$VALUE\"; echo \"$VALUE\" | grep -qi 'yes' && SCORE=$((SCORE+1)); echo \"SSH_HARDENING_SCORE=$SCORE/$TOTAL\"; if [ \"$SCORE\" -ge 2 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -386,14 +418,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0011-T1105.a",
-                    "title": "tools_presence",
-                    "command": "command -v curl 2>/dev/null && curl --version | head -n 2 || true; command -v wget 2>/dev/null && wget --version | head -n 2 || true",
+                    "title": "Download tools present",
+                    "command": "TOOLS=''; command -v curl >/dev/null 2>&1 && TOOLS=\"$TOOLS curl\"; command -v wget >/dev/null 2>&1 && TOOLS=\"$TOOLS wget\"; echo \"DOWNLOAD_TOOLS=$TOOLS\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0011-T1105.b",
-                    "title": "downloads_dirs_recent",
-                    "command": "for d in /tmp /var/tmp /dev/shm; do [ -d \"$d\" ] && { echo \"== $d recent ==\"; find \"$d\" -maxdepth 2 -type f -printf '%TY-%Tm-%Td %TH:%TM %p %s\\n' 2>/dev/null | sort -r | head -n 120; }; done",
+                    "title": "Suspicious files in tmp",
+                    "command": "SUSPICIOUS=0; for d in /tmp /var/tmp /dev/shm; do if [ -d \"$d\" ]; then COUNT=$(find \"$d\" -maxdepth 2 -type f \\( -perm -100 -o -name '*.sh' -o -name '*.py' -o -name '*.pl' \\) 2>/dev/null | wc -l); SUSPICIOUS=$((SUSPICIOUS+COUNT)); fi; done; echo \"SUSPICIOUS_TMP_FILES=$SUSPICIOUS\"; if [ \"$SUSPICIOUS\" -le 5 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; for d in /tmp /var/tmp /dev/shm; do find \"$d\" -maxdepth 2 -type f \\( -perm -100 -o -name '*.sh' \\) 2>/dev/null | head -n 10; done; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -418,14 +454,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0011-T1071.a",
-                    "title": "dns_config",
-                    "command": "cat /etc/resolv.conf 2>/dev/null || true; systemctl status systemd-resolved --no-pager 2>/dev/null || true",
+                    "title": "DNS resolver config",
+                    "command": "if [ -f /etc/resolv.conf ]; then echo 'RESOLVER=CONFIGURED'; cat /etc/resolv.conf 2>/dev/null | grep nameserver; echo 'CHECK=PASS'; else echo 'RESOLVER=MISSING'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0011-T1071.b",
-                    "title": "outbound_connections_sample",
-                    "command": "ss -antup 2>/dev/null | awk 'NR<3 || /ESTAB/ {print}' | head -n 220 || true",
+                    "title": "Outbound connections",
+                    "command": "OUTBOUND=$(ss -antup 2>/dev/null | grep ESTAB | wc -l); echo \"OUTBOUND_CONNECTIONS=$OUTBOUND\"; ss -antup 2>/dev/null | grep ESTAB | head -n 20; if [ \"$OUTBOUND\" -le 50 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -450,8 +490,10 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0010-T1041.a",
-                    "title": "top_network_procs_basic",
-                    "command": "if command -v lsof >/dev/null 2>&1; then lsof -i -n -P | head -n 220; else echo \"SKIP_LSOF\"; fi",
+                    "title": "Network processes visibility",
+                    "command": "if command -v lsof >/dev/null 2>&1; then NET_PROCS=$(lsof -i -n -P 2>/dev/null | grep -c ESTABLISHED); echo \"NET_PROCESSES=$NET_PROCS\"; echo 'LSOF=AVAILABLE'; echo 'CHECK=PASS'; else echo 'LSOF=NOT_AVAILABLE'; NET_PROCS=$(ss -antup 2>/dev/null | grep -c ESTAB); echo \"NET_PROCESSES=$NET_PROCS\"; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -476,14 +518,18 @@
             "automatedChecks": [
                 {
                     "checkId": "TA0040-T1486.a",
-                    "title": "backup_jobs_hint",
-                    "command": "grep -R \"restic\\|borg\\|rclone\\|rsync\\|backup\" -n /etc/cron.* /etc/crontab 2>/dev/null | head -n 200 || true",
+                    "title": "Backup presence",
+                    "command": "BACKUP_FOUND=$(grep -rlE 'restic|borg|rclone|rsync|backup' /etc/cron.* /etc/crontab 2>/dev/null | wc -l); echo \"BACKUP_CRON_REFS=$BACKUP_FOUND\"; TOOLS=''; command -v restic >/dev/null 2>&1 && TOOLS=\"$TOOLS restic\"; command -v borg >/dev/null 2>&1 && TOOLS=\"$TOOLS borg\"; command -v rsync >/dev/null 2>&1 && TOOLS=\"$TOOLS rsync\"; echo \"BACKUP_TOOLS=$TOOLS\"; if [ \"$BACKUP_FOUND\" -gt 0 ] || [ -n \"$TOOLS\" ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "TA0040-T1486.b",
-                    "title": "disk_usage_snapshot",
-                    "command": "df -h; iostat -x 1 3 2>/dev/null || echo \"SKIP_IOSTAT\"",
+                    "title": "Disk usage normal",
+                    "command": "HIGH_USAGE=$(df -h 2>/dev/null | awk 'NR>1 {gsub(/%/,\"\",$5); if($5+0 > 90) print $0}' | wc -l); echo \"HIGH_DISK_PARTITIONS=$HIGH_USAGE\"; df -h 2>/dev/null | head -n 10; if [ \"$HIGH_USAGE\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -508,14 +554,18 @@
             "automatedChecks": [
                 {
                     "checkId": "COVERAGE-LOG-01.a",
-                    "title": "journald_conf",
-                    "command": "journalctl --disk-usage 2>/dev/null || true; cat /etc/systemd/journald.conf 2>/dev/null || true",
+                    "title": "Journald active and usage",
+                    "command": "if systemctl is-active systemd-journald >/dev/null 2>&1; then echo 'JOURNALD=ACTIVE'; journalctl --disk-usage 2>/dev/null; echo 'CHECK=PASS'; else echo 'JOURNALD=INACTIVE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "COVERAGE-LOG-01.b",
-                    "title": "rsyslog_status",
-                    "command": "systemctl status rsyslog --no-pager 2>/dev/null || true; ls -la /etc/rsyslog.d 2>/dev/null || true",
+                    "title": "Rsyslog active",
+                    "command": "if systemctl is-active rsyslog >/dev/null 2>&1; then echo 'RSYSLOG=ACTIVE'; echo 'CHECK=PASS'; else echo 'RSYSLOG=INACTIVE'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -530,14 +580,18 @@
             "automatedChecks": [
                 {
                     "checkId": "COVERAGE-LOG-02.a",
-                    "title": "auditd_status",
-                    "command": "systemctl status auditd --no-pager 2>/dev/null || true; auditctl -s 2>/dev/null || true",
+                    "title": "Auditd active",
+                    "command": "if systemctl is-active auditd >/dev/null 2>&1; then echo 'AUDITD=ACTIVE'; auditctl -s 2>/dev/null | head -n 5; echo 'CHECK=PASS'; else echo 'AUDITD=INACTIVE'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "COVERAGE-LOG-02.b",
-                    "title": "audit_rules_preview",
-                    "command": "auditctl -l 2>/dev/null | head -n 220 || true; for f in /etc/audit/rules.d/*; do [ -f \"$f\" ] && { echo \"--- $f\"; sed -n '1,160p' \"$f\"; }; done 2>/dev/null || true",
+                    "title": "Audit rules defined",
+                    "command": "RULES=$(auditctl -l 2>/dev/null | wc -l); echo \"AUDIT_RULES=$RULES\"; if [ \"$RULES\" -gt 0 ]; then auditctl -l 2>/dev/null | head -n 20; echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -562,14 +616,18 @@
             "automatedChecks": [
                 {
                     "checkId": "COVERAGE-NET-01.a",
-                    "title": "ports_and_procs",
-                    "command": "ss -lntup 2>/dev/null || true",
+                    "title": "Listening ports",
+                    "command": "LISTEN=$(ss -lntup 2>/dev/null | grep -c LISTEN); echo \"LISTENING_PORTS=$LISTEN\"; ss -lntup 2>/dev/null | head -n 20; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
                 {
                     "checkId": "COVERAGE-NET-01.b",
-                    "title": "established_sample",
-                    "command": "ss -antup 2>/dev/null | grep ESTAB | head -n 220 || true",
+                    "title": "Established connections",
+                    "command": "ESTAB=$(ss -antup 2>/dev/null | grep -c ESTAB); echo \"ESTABLISHED=$ESTAB\"; ss -antup 2>/dev/null | grep ESTAB | head -n 20; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -584,8 +642,10 @@
             "automatedChecks": [
                 {
                     "checkId": "COVERAGE-INTEGRITY-01.a",
-                    "title": "critical_hashes",
-                    "command": "for f in /etc/ssh/sshd_config /etc/sudoers /etc/passwd /etc/shadow /etc/crontab /etc/sysctl.conf; do [ -f \"$f\" ] && { echo \"== $f ==\"; sha256sum \"$f\"; }; done 2>/dev/null || true",
+                    "title": "Critical config hashes",
+                    "command": "FOUND=0; for f in /etc/ssh/sshd_config /etc/sudoers /etc/passwd /etc/shadow /etc/crontab /etc/sysctl.conf; do if [ -f \"$f\" ]; then FOUND=$((FOUND+1)); echo \"$(sha256sum \"$f\")\"; fi; done; echo \"HASHED_FILES=$FOUND\"; if [ \"$FOUND\" -ge 3 ]; then echo 'CHECK=PASS'; else echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],
@@ -610,8 +670,10 @@
             "automatedChecks": [
                 {
                     "checkId": "COVERAGE-TIME-01.a",
-                    "title": "timesyncd_status",
-                    "command": "timedatectl 2>/dev/null || true; systemctl status systemd-timesyncd --no-pager 2>/dev/null || true; chronyc tracking 2>/dev/null || true; ntpq -p 2>/dev/null || true",
+                    "title": "NTP sync status",
+                    "command": "if timedatectl status 2>/dev/null | grep -qi 'synchronized: yes\\|NTP.*active'; then echo 'NTP=SYNCED'; timedatectl status 2>/dev/null | head -n 5; echo 'CHECK=PASS'; elif systemctl is-active chronyd >/dev/null 2>&1; then echo 'NTP=SYNCED'; echo 'CHECK=PASS'; elif systemctl is-active systemd-timesyncd >/dev/null 2>&1; then echo 'NTP=SYNCED'; echo 'CHECK=PASS'; else echo 'NTP=NOT_SYNCED'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
             ],

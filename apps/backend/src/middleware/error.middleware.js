@@ -28,10 +28,15 @@ const errorHandler = (err, req, res, next) => {
 
     // Erori personalizate
     if (err.statusCode) {
-        return res.status(err.statusCode).json({
+        const response = {
             error: err.name || 'Error',
             message: err.message,
-        });
+        };
+        // Propagare erori validare comenzi catre frontend
+        if (err.commandErrors) {
+            response.commandErrors = err.commandErrors;
+        }
+        return res.status(err.statusCode).json(response);
     }
 
     // Eroare generica

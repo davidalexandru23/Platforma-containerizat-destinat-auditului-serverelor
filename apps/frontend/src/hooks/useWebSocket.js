@@ -69,12 +69,12 @@ export function useWebSocket(namespace, room, roomKey) {
     return { socket, connected, lastMessage, subscribe, unsubscribe };
 }
 
-// hook pt live metrics
+// Hook pentru metrici live
 export function useLiveMetrics(serverId) {
     return useWebSocket('/ws/live', serverId, 'serverId');
 }
 
-// hook pt audit progress
+// Hook pentru progres audit
 export function useAuditProgress(auditRunId) {
     return useWebSocket('/ws/audit', auditRunId, 'auditRunId');
 }

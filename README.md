@@ -1,255 +1,406 @@
-# BitTrail - Platforma de Audit Securitate
+# BitTrail — Platforma Containerizata pentru Auditul Serverelor Linux
 
-Acesta este proiectul meu pentru lucrarea de licenta, o platforma distribuita pentru auditarea automata a securitatii serverelor Linux.
+BitTrail este o platforma distribuita care automatizeaza procesul de audit al securitatii pe servere Linux. In loc sa verifici manual configuratia fiecarui server, instalezi un agent care colecteaza date, ruleaza verificari si raporteaza rezultatele intr-o interfata web centralizata.
 
-## Despre Proiect
-
-BitTrail automatizeaza procesul de verificare a conformitatii serverelor (momentan bazat pe CIS Benchmarks). In loc sa faci verificari manuale pe fiecare server, instalezi un agent usor (`bittrail-agent`) care comunica cu serverul central.
-
-## Arhitectura Sistemului
-
-Solutia este impartita in 3 componente principale, toate containerizate:
-
-1.  **Backend (Node.js/Express)**: "Creierul" aplicatiei. Gestioneaza baza de date (PostgreSQL), API-urile REST, si comunicarea in timp real (WebSockets) cu frontend-ul.
-2.  **Frontend (React/Vite)**: Interfata de administrare pentru utilizatori. De aici se pot vizualiza serverele, porni audituri si genera rapoarte PDF.
-3.  **Agent (Go)**: Un binar compilat static care ruleaza pe serverele tinta. Acesta primeste comenzi de la backend, ruleaza verificarile locale (verifica pachete, configuratii, porturi) si trimite rezultatele inapoi.
-
-## Functionalitati Principale
-
-*   Monitorizare in timp real (CPU, RAM, Disk)
-*   Sistem de audit flexibil folosind Template-uri JSON
-*   Agent scris in Go pentru performanta si portabilitate (nu necesita dependinte pe host)
-*   Rapoarte detaliate PDF
-*   Sistem de notificari live
-*   Deployment usor cu Docker Compose
+Proiectul a fost realizat ca lucrare de licenta si acopera intreg ciclul de audit: de la inrolarea unui server si colectarea metricilor in timp real, pana la generarea de rapoarte PDF cu scorul de conformitate.
 
 ---
 
-## Standarde de Securitate
+## Cuprins
 
-BitTrail foloseste template-uri de audit bazate pe standarde internationale certificate:
-
-### CIS Controls v8
-
-[CIS Controls](https://www.cisecurity.org/controls) este un framework de 18 controale prioritizate, dezvoltat de Center for Internet Security:
-
-- **Implementation Group 1 (IG1)**: Controale esentiale pentru orice organizatie ("Basic Cyber Hygiene")
-- **Implementation Group 2 (IG2)**: Controale intermediare pentru organizatii cu resurse IT dedicate
-- **Implementation Group 3 (IG3)**: Controale avansate pentru organizatii cu date foarte sensibile
-
-Template disponibil: `CIS Controls v8 Implementation Group 1` - 25 controale cu 40+ verificari automate.
-
-### CIS Benchmarks
-
-[CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks) sunt ghiduri tehnice detaliate pentru configurarea securizata a sistemelor:
-
-- **Level 1**: Recomandari de baza care nu afecteaza functionalitatea
-- **Level 2**: Recomandari pentru medii cu securitate ridicata
-
-Template disponibil: `CIS Ubuntu 22.04 LTS Level 1 Server` - 50+ verificari automate pentru:
-- Filesystem (cramfs, squashfs, partitionare)
-- Process Hardening (ASLR, core dumps)
-- AppArmor/MAC
-- Servicii (xinetd, avahi, CUPS, NTP)
-- Network (forwarding, ICMP, SYN cookies, firewall)
-- Logging (auditd, rsyslog)
-- SSH (8 verificari: root login, empty passwords, etc.)
-- Parole si conturi
-
-### ISO/IEC 27001:2022 & 27002:2022
-
-[ISO 27001](https://www.iso.org/isoiec-27001-information-security.html) este standardul international pentru Sistemele de Management al Securitatii Informatiei (ISMS).
-
-[ISO 27002:2022](https://www.iso.org/standard/75652.html) contine 93 controale in 4 categorii:
-- Controale Organizationale (37)
-- Controale Persoane (8)
-- Controale Fizice (14)
-- **Controale Tehnologice (34)** - cele mai potrivite pentru automatizare
-
-Template disponibil: `ISO 27002:2022 Technical Controls` - 17 controale din Anexa A Categoria 8 cu verificari pentru:
-- A.8.2 Drepturi de acces privilegiat
-- A.8.5 Autentificare securizata
-- A.8.6 Management capacitate (disk, memorie, CPU)
-- A.8.8 Management vulnerabilitati
-- A.8.15 Logging
-- A.8.20 Securitate retele
-
-### OpenSCAP / SCAP
-
-[SCAP (Security Content Automation Protocol)](https://www.open-scap.org/) este un standard NIST pentru automatizarea verificarilor de securitate. BitTrail implementeaza concepte similare prin:
-- Verificari automatizate bazate pe comenzi shell
-- Comparatii flexibile (EQUALS, LESS_THAN, GREATER_THAN, CONTAINS)
-- Export/import template-uri JSON
+- [Arhitectura](#arhitectura)
+- [Functionalitati](#functionalitati)
+- [Instalare si Deployment](#instalare-si-deployment)
+- [Agentul BitTrail](#agentul-bittrail)
+- [Sabloane de Audit Predefinite](#sabloane-de-audit-predefinite)
+- [Securitate](#securitate)
+- [Structura Bazei de Date](#structura-bazei-de-date)
+- [Bibliografie](#bibliografie)
 
 ---
 
-## Agent BitTrail
+## Arhitectura
 
+Platforma este compusa din trei componente principale, toate rulate prin Docker Compose:
 
-Agentul este un binar Go compilat static care ruleaza pe serverele Linux pe care doresti sa le auditezi.
-
-### Instalare Agent
-
-**Pasul 1: Adauga serverul in interfata web**
-
-Din interfata BitTrail, mergi la `Servere > Adauga Server`. Vei primi un token de enrollment.
-
-**Pasul 2: Descarca agentul pe server**
-
-Detecteaza arhitectura serverului tau:
-
-```bash
-uname -m
-# x86_64 = Intel/AMD (foloseste bittrail-agent-linux-amd64)
-# aarch64 = ARM64/Raspberry Pi (foloseste bittrail-agent-linux-arm64)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Docker Compose (host)                        │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │  PostgreSQL   │  │   Backend    │  │      Frontend        │  │
+│  │  (bittrail-db)│  │  Node.js     │  │   React + Nginx      │  │
+│  │              │◄─┤  Express     │◄─┤   (proxy /api, /ws)  │  │
+│  │  Port: 5432  │  │  Port: 3000  │  │   Port: 80           │  │
+│  └──────────────┘  └──────┬───────┘  └──────────────────────┘  │
+│                           │ WebSocket + REST API                │
+└───────────────────────────┼─────────────────────────────────────┘
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+        ┌─────▼────┐  ┌─────▼────┐  ┌─────▼────┐
+        │  Agent   │  │  Agent   │  │  Agent   │
+        │  (Go)    │  │  (Go)    │  │  (Go)    │
+        │  VM #1   │  │  VM #2   │  │  VM #N   │
+        └──────────┘  └──────────┘  └──────────┘
 ```
 
-**Pentru x86_64 (Intel/AMD):**
+### Backend (Node.js + Express)
+
+Serverul central care gestioneaza toata logica de business:
+
+- **API REST** pentru frontend si agenti (autentificare, servere, audituri, template-uri)
+- **WebSocket** (Socket.IO) cu namespace-uri dedicate: `/ws/live` pentru metrici in timp real, `/ws/servers` pentru status, `/ws/audit` pentru progresul auditurilor
+- **Prisma ORM** pentru interactiunea cu PostgreSQL
+- Servire binare agent pre-compilate pe `/downloads/` (install script, update, uninstall)
+- Generare si validare token-uri JWT (access + refresh)
+- Middleware-uri: rate limiting, validare comenzi, autorizare pe roluri (RBAC)
+
+### Frontend (React + Vite)
+
+Interfata web servita prin Nginx ca reverse proxy:
+
+- Dashboard cu metrici live, activitate recenta, status servere
+- Pagina de detaliu server cu tab-uri: Overview (metrici CPU/RAM/disk/retea), Istoric Audituri, Configuratie (inventar OS), Enrollment (instructiuni instalare agent)
+- Vizualizare detaliu audit: progres pe controale, rezultate automate si manuale, scor conformitate
+- Generare raport PDF direct din browser (jsPDF)
+- Gestiune template-uri si utilizatori
+
+### Agent (Go)
+
+Binar compilat static (~10MB), fara dependinte externe, ruleaza pe serverele Linux auditate:
+
+- **Colectare metrici** la fiecare 10 secunde: CPU, memorie, disk, retea, load average, procese top
+- **Colectare inventar** la fiecare ora: distributie OS, pachete instalate, servicii active, porturi deschise, configuratie SSH, reguli firewall, utilizatori sistem, valori sysctl
+- **Executie verificari audit**: primeste comenzi de la backend, le ruleaza in sandbox (cu timeout 30s si blacklist comenzi periculoase), semneaza rezultatele si le trimite inapoi
+- **Detectie IP local**: raporteaza adresa IPv4 reala a masinii, evitand problemele NAT din Docker
+
+---
+
+## Functionalitati
+
+### Monitorizare in Timp Real
+
+Cand un agent este online, metricile (CPU, RAM, disk, retea) sunt trimise la fiecare 10 secunde si afisate live pe dashboard prin WebSocket. Statusul serverelor se actualizeaza automat — daca agentul nu mai trimite date, serverul apare ca `OFFLINE` dupa un timeout configurat.
+
+### Audit Automatizat
+
+Procesul de audit functioneaza astfel:
+
+1. Auditorul selecteaza un server si un sablon (template) din interfata
+2. Backend-ul extrage controalele din template, semneaza fiecare comanda si le trimite agentului
+3. Agentul executa comenzile, verifica output-ul fata de rezultatele asteptate, semneaza digital rezultatele si le raporteaza
+4. Backend-ul calculeaza scorul de conformitate si notifica frontend-ul in timp real
+
+Fiecare rezultat include metadate **Chain of Custody**: hash SHA-256 al output-ului, timestamp exact, hostname, user-ul care a executat, exit code si semnatura digitala a agentului.
+
+### Verificari Manuale
+
+Pe langa verificarile automate, template-urile pot include **verificari manuale** care necesita interventie umana (ex: "Exista proces documentat de generare SBOM?"). Auditorul poate marca fiecare task manual ca PASS/FAIL, adauga comentarii si atasa dovezi (upload fisier, link sau atestare).
+
+### Rapoarte PDF
+
+Dupa finalizarea auditului (toate verificarile automate + manuale rezolvate), se poate genera un raport PDF detaliat direct din browser, continand:
+- Informatii server (hostname, IP, OS)
+- Scor conformitate automat si manual
+- Detalii fiecare control: status, output, erori
+- Timestamp si metadate Chain of Custody
+
+### Inventar Server
+
+Agentul colecteaza periodic un snapshot al configuratiei serverului: distributie si versiune OS, kernel, pachete instalate (dpkg/rpm), servicii active, porturi deschise, configuratie SSH, reguli firewall, utilizatori si grupuri sistem. Aceste date sunt stocate istoric si disponibile in tab-ul `Configuratie` al fiecarui server.
+
+---
+
+## Instalare si Deployment
+
+### Cerinte
+
+- Docker si Docker Compose instalate pe masina care va gazdui platforma
+- Port 80 (frontend) si 3000 (backend) disponibile
+- Serverele Linux tinta trebuie sa aiba acces retea la backend (port 3000)
+
+### Pornire Platforma
 
 ```bash
-curl -fsSL http://YOUR-BITTRAIL-SERVER:3000/downloads/bittrail-agent-linux-amd64 -o bittrail-agent
-curl -fsSL http://YOUR-BITTRAIL-SERVER:3000/downloads/install.sh -o install.sh
-chmod +x bittrail-agent install.sh
+# Clonare repo
+git clone https://github.com/davidalexandru23/Platform-containerizat-destinat-auditului-serverelor.git
+cd Platform-containerizat-destinat-auditului-serverelor
+
+# Copiere si editare fisier .env (setare DATABASE_URL, JWT_SECRET, etc.)
+cp .env.example .env
+
+# Pornire toate serviciile
+docker compose up --build -d
 ```
 
-**Pentru ARM64 (Raspberry Pi, Oracle Cloud, etc):**
+Containerele pornite:
+- `bittrail-db` — PostgreSQL (persistent volume)
+- `bittrail-backend` — API + WebSocket (port 3000)
+- `bittrail-frontend` — React + Nginx (port 80)
+- `bittrail-agent-demo` — agent de demo (optional)
+
+Dupa prima pornire, backend-ul ruleaza automat migrarile Prisma si importa template-urile predefinite.
+
+---
+
+## Agentul BitTrail
+
+Agentul este un binar Go compilat static care se instaleaza pe fiecare server Linux pe care vrei sa-l auditezi. Procesul complet are trei pasi: instalare, inrolare si pornire.
+
+### 1. Instalare (One-Liner)
+
+Scriptul de instalare descarca binarul, il plaseaza in `/usr/local/bin/` si optional configureaza un serviciu systemd:
 
 ```bash
-curl -fsSL http://YOUR-BITTRAIL-SERVER:3000/downloads/bittrail-agent-linux-arm64 -o bittrail-agent
-curl -fsSL http://YOUR-BITTRAIL-SERVER:3000/downloads/install.sh -o install.sh
-chmod +x bittrail-agent install.sh
+curl -fsSL http://BACKEND_IP:3000/downloads/install.sh | sudo bash -s -- http://BACKEND_IP:3000
 ```
 
-**Pasul 3: Instaleaza**
+Scriptul detecteaza automat arhitectura (amd64 sau arm64) si intreaba daca doresti instalare ca serviciu systemd (recomandat pentru productie).
+
+### 2. Inrolare
+
+Dupa instalare, agentul trebuie conectat la platforma. Din interfata web, mergi pe pagina serverului -> tab-ul `Enrollment` si copiaza comanda cu token-ul generat:
 
 ```bash
-sudo ./install.sh
+sudo ./bittrail-agent enroll --token TOKEN_DIN_UI --server http://BACKEND_IP:3000
 ```
 
-**Pasul 4: Inroleaza agentul**
+La inrolare se intampla urmatoarele:
+- Agentul genereaza o pereche de chei RSA (privata + publica)
+- Trimite un CSR (Certificate Signing Request) la backend
+- Backend-ul semneaza CSR-ul cu CA-ul intern si returneaza certificatul
+- Agentul salveaza configuratia in `/etc/bittrail-agent/config.yaml`
+- Token-ul de inrolare este invalidat (single-use)
+
+### 3. Pornire
 
 ```bash
-sudo ./bittrail-agent enroll --server http://YOUR-BITTRAIL-SERVER:3000 --token TOKEN_DIN_INTERFATA
-```
-
-**Pasul 5: Porneste serviciul**
-
-```bash
-sudo systemctl enable bittrail-agent
+# Ca serviciu systemd (recomandat)
 sudo systemctl start bittrail-agent
+sudo systemctl enable bittrail-agent   # pornire automata la boot
+
+# Sau in mod interactiv (util pentru debug)
+sudo bittrail-agent run
 ```
 
-### Verificare Status
-
-```bash
-# Status serviciu
-sudo systemctl status bittrail-agent
-
-# Loguri live
-sudo journalctl -u bittrail-agent -f
-
-# Versiune agent
-bittrail-agent version
-```
-
-### Comenzi Agent
+### Comenzi CLI
 
 | Comanda | Descriere |
 |---------|-----------|
-| `bittrail-agent enroll --server URL --token TOKEN` | Inroleaza agentul cu backend-ul |
-| `bittrail-agent run` | Porneste agentul (folosit de systemd) |
-| `bittrail-agent status` | Afiseaza configuratia curenta |
-| `bittrail-agent version` | Afiseaza versiunea agentului |
-| `bittrail-agent test` | Testeaza colectarea de metrici |
+| `enroll --server URL --token TOKEN` | Inrolare agent pe platforma |
+| `run` | Pornire in mod daemon (foreground) |
+| `status` | Afisare configuratie curenta si stare |
+| `test` | Rulare colectori o data si afisare rezultate (dry-run) |
+| `version` | Afisare versiune agent |
+| `help` | Ajutor pentru orice comanda |
+
+Toate comenzile (cu exceptia `version` si `help`) necesita `sudo` deoarece config-ul se afla in `/etc/bittrail-agent/`.
+
+### Gestionare Serviciu
+
+```bash
+sudo systemctl start bittrail-agent     # Pornire
+sudo systemctl stop bittrail-agent      # Oprire
+sudo systemctl restart bittrail-agent   # Restart
+sudo systemctl status bittrail-agent    # Status
+sudo journalctl -u bittrail-agent -f    # Loguri live
+```
+
+### Actualizare Agent
+
+Din interfata web, tab-ul Enrollment, copiaza comanda de update care descarca cel mai recent binar de pe backend:
+
+```bash
+curl -fsSL http://BACKEND_IP:3000/downloads/update.sh | sudo bash -s -- http://BACKEND_IP:3000
+```
+
+### Dezinstalare
+
+```bash
+curl -fsSL http://BACKEND_IP:3000/downloads/uninstall.sh | sudo bash
+```
 
 ---
 
-## Update Agent
+## Sabloane de Audit Predefinite
 
-Cand este disponibila o versiune noua a agentului, in interfata web (tab Enrollment) vei vedea un avertisment cu versiunea instalata vs disponibila.
+Platforma vine cu 4 sabloane predefinite, fiecare acoperind un standard sau framework diferit. Sabloanele contin doua tipuri de verificari:
 
-### Update Manual
+- **Automate**: comenzi bash executate de agent pe server, cu rezultat comparat automat (PASS/FAIL/WARN)
+- **Manuale**: verificari care necesita interventie umana si dovezi (documente, link-uri, atestatii)
 
-```bash
-# 1. Opreste agentul
-sudo systemctl stop bittrail-agent
+### MITRE ATT&CK — Linux Server Defensive Coverage
 
-# 2. Descarca noua versiune (alege varianta corecta pentru arhitectura ta)
+**Fisier**: `mitre_attack_linux_defense.json` | **Tip**: MITRE
 
-# Pentru x86_64 (Intel/AMD):
-curl -fsSL http://YOUR-BITTRAIL-SERVER:3000/downloads/bittrail-agent-linux-amd64 -o /tmp/bittrail-agent
+Evalueaza acoperirea defensiva a serverului fata de tacticile si tehnicile din framework-ul MITRE ATT&CK. Controalele sunt organizate dupa ID-urile ATT&CK (ex: TA0001-T1078 "Valid Accounts").
 
-# Pentru ARM64 (Raspberry Pi, Oracle Cloud):
-curl -fsSL http://YOUR-BITTRAIL-SERVER:3000/downloads/bittrail-agent-linux-arm64 -o /tmp/bittrail-agent
+**Zone acoperite** (22 controale):
+- **Initial Access**: monitorizare autentificari (SSH/sudo), protectie brute-force (fail2ban/faillock), inventar servicii expuse
+- **Persistence**: inventar cron jobs, systemd timers, unit files custom
+- **Privilege Escalation**: fisiere SUID/SGID, reguli NOPASSWD in sudoers
+- **Defense Evasion**: verificare logging activ (journald/rsyslog/auditd), detectie oprire servicii de securitate
+- **Credential Access**: permisiuni fisiere shadow, reguli audit pentru acces la credentiale
+- **Lateral Movement**: hardening SSH (root login, password auth, pubkey)
+- **Command & Control**: conexiuni outbound, tool-uri download (curl/wget), fisiere suspecte in /tmp
+- **Telemetry Baseline**: NTP sincronizat, file integrity (hash-uri fisiere critice), retentie loguri
 
-# 3. Inlocuieste binarul
-chmod +x /tmp/bittrail-agent
-sudo mv /tmp/bittrail-agent /usr/local/bin/bittrail-agent
+### NIS2 Baseline — Directiva UE
 
-# 4. Reporneste agentul
-sudo systemctl start bittrail-agent
+**Fisier**: `nis2_baseline_server.json` | **Tip**: NIS2
 
-# 5. Verifica versiunea
-bittrail-agent version
-```
+Implementeaza cerintele de baza ale Directivei NIS2 (Network and Information Security) a Uniunii Europene, adaptate la nivel de server.
 
-### Update cu Script
+**Zone acoperite**:
+- Igiena cibernetica de baza (actualizari, parole, firewall)
+- Management vulnerabilitati si postura de patching
+- Securitate acces si autentificare
+- Configurare retea si servicii expuse
+- Logging si auditare
 
-```bash
-curl -fsSL https://YOUR-BITTRAIL-SERVER/downloads/update.sh -o update.sh
-chmod +x update.sh
-sudo ./update.sh https://YOUR-BITTRAIL-SERVER
-```
+### NIST SP 800-53 Moderate
 
-### Arhitecturi Suportate
+**Fisier**: `nist_800_53_moderate_server.json` | **Tip**: NIST
 
-| Arhitectura | Fisier |
-|-------------|--------|
-| x86_64 (Intel/AMD) | `bittrail-agent-linux-amd64` |
-| ARM64 (Raspberry Pi, etc) | `bittrail-agent-linux-arm64` |
+Controale bazate pe publicatia NIST SP 800-53, adaptate pentru nivel moderat de risc, concentrate pe verificari tehnice la nivel de server.
+
+**Zone acoperite**:
+- Control acces (AC): conturi privilegiate, politici parola, SSH hardening
+- Audit si Responsabilitate (AU): logging, retentie, integritate loguri
+- Protectie Sistem si Comunicatii (SC): firewall, TLS, configuratie retea
+- Integritate Sistem si Informatii (SI): actualizari, antivirus/EDR, integritate fisiere
+
+### Supply Chain & SBOM Readiness (SLSA-lite)
+
+**Fisier**: `supply_chain_sbom_lite.json` | **Tip**: SUPPLY_CHAIN
+
+Verificari orientate pe securitatea lantului de aprovizionare software, inspirate din framework-ul SLSA (Supply-chain Levels for Software Artifacts).
+
+**Zone acoperite** (6 controale):
+- **SBOM-lite**: inventar OS si pachete, detectie package manager
+- **Repository Integrity**: verificare surse oficiale, TLS pe repo-uri, GPG check activ, keyrings
+- **Patching & Updates**: numar update-uri pending, unattended upgrades, detectie reboot necesar
+- **Container Supply Chain**: inventar Docker, detectie tag `:latest`, digest pinning, registries non-standard
+- **Git Hygiene**: checkouts pe server, chei private expuse
+- **Hardening minim**: SSH (password auth, root login), firewall activ
+
+### Template-uri Custom
+
+Pe langa sabloanele predefinite, utilizatorii cu rol ADMIN sau AUDITOR pot crea template-uri proprii in format JSON, urmand structura `bittrail-template@1.0`.
 
 ---
 
-## Pentru Dezvoltatori
+## Securitate
 
-### Compilare Agent
+### PKI (Public Key Infrastructure)
 
-```bash
-cd apps/agent
+Platforma implementeaza o infrastructura de chei publice interna:
 
-# Build pentru Linux x86_64 (default)
-make build
+- La pornire, backend-ul genereaza un **CA (Certificate Authority)** auto-semnat
+- La inrolarea fiecarui agent, acesta genereaza o pereche RSA 2048-bit, trimite un CSR backend-ului, iar CA-ul intern semneaza certificatul
+- Fiecare comanda de audit trimisa de backend este **semnata digital** cu cheia privata a CA-ului
+- Agentul **verifica semnatura** comenzii inainte de executie — comenzile nesemnate sau cu semnatura invalida sunt refuzate
+- Rezultatele auditului sunt **semnate digital** de agent cu cheia lui privata, iar backend-ul verifica semnatura la receptie
 
-# Build pentru toate arhitecturile
-make build-all
+### Protectie Comenzi pe Agent
 
-# Build + Publish in backend (pt download)
-make publish-all
-```
+Agentul are un dublu sistem de protectie:
 
-### Versionare
+1. **Validare pe backend** (`commandValidator.service.js`): inainte de a trimite o comanda agentului, backend-ul o verifica contra unei liste de pattern-uri periculoase (rm -rf, dd, mkfs, shutdown, etc.)
+2. **Blacklist pe agent** (`audit.go`): ultima linie de aparare — chiar daca o comanda trece de backend, agentul o refuza daca se potriveste cu un pattern blocant
 
-Versiunea agentului este generata automat din data curenta (format: `YYYY.MM.DD`).
+Comenzile blocate includ: `rm -rf /`, `dd`, `mkfs`, `shutdown`, `reboot`, `poweroff`, `useradd`, `userdel`, `passwd`, `systemctl start/stop/restart`, `iptables -F/-X/-D`, `eval`, `exec`.
 
-Dupa `make publish-all`, fisierele sunt copiate in `apps/backend/public/`:
-- `bittrail-agent-linux-amd64`
-- `bittrail-agent-linux-arm64`
-- `install.sh`
-- `update.sh`
-- `agent-version.json`
+### Autentificare si Autorizare
 
-### Structura Proiect
+- **JWT** (JSON Web Tokens) cu access token (scurt) + refresh token (lung)
+- **RBAC** (Role-Based Access Control) cu 3 roluri: ADMIN, AUDITOR, VIEWER
+- **Permisiuni granulare** per server per utilizator
+- **Rate limiting** pe autentificare (10 req/min) si pe API agent (60 req/min)
+- Parole hash-uite cu **bcrypt**
+- Token-uri de inrolare single-use cu expirare 24 ore
 
-```
-apps/
-├── agent/          # Agent Go
-│   ├── cmd/        # Entry point
-│   ├── internal/   # Logica interna
-│   ├── Makefile    # Build/publish
-│   ├── install.sh  # Script instalare
-│   └── update.sh   # Script update
-├── backend/        # API Node.js
-│   ├── public/     # Fisiere downloadabile
-│   └── src/        # Cod sursa
-└── frontend/       # UI React
-```
+### Chain of Custody
+
+Fiecare rezultat de audit contine metadate pentru trasabilitate completa:
+- Hash SHA-256 al output-ului (orice modificare pe drum se detecteaza)
+- Timestamp exact al executiei pe agent
+- Hostname si user-ul care a executat comanda
+- Exit code al procesului
+- Semnatura digitala RSA a agentului
+- Flag de verificare semnatura (`verified`)
+
+### Redactare Secrete
+
+Inainte de a trimite rezultatele, agentul trece output-ul prin functia `RedactSecrets()` care mascheaza automat pattern-uri de parole, token-uri si chei private din output.
+
+---
+
+## Structura Bazei de Date
+
+Schema PostgreSQL (gestionata prin Prisma) include urmatoarele entitati principale:
+
+| Entitate | Descriere |
+|----------|-----------|
+| `User` | Utilizatori cu email, parola hash-uita si roluri |
+| `Role` | Roluri (ADMIN, AUDITOR, VIEWER) cu capabilitati |
+| `Server` | Servere inregistrate (hostname, IP, status) |
+| `AgentIdentity` | Identitatea agentului (token, certificat, versiune) |
+| `Template` | Sabloane de audit (predefinite sau custom) |
+| `TemplateVersion` | Versiuni ale sabloanelor (versionare) |
+| `Control` | Controale individuale dintr-un sablon |
+| `AutomatedCheck` | Verificari automate (comanda, rezultat asteptat, comparatie) |
+| `ManualCheck` | Verificari manuale (instructiuni, specificatii dovezi) |
+| `AuditRun` | Executii audit (status, scor, server, template) |
+| `CheckResult` | Rezultate verificari automate (output, hash, semnatura) |
+| `ManualTaskResult` | Rezultate verificari manuale (status, dovezi) |
+| `InventorySnapshot` | Snapshot-uri inventar server (OS, pachete, servicii) |
+| `MetricSample` | Esantioane metrici (CPU, RAM, disk, retea) |
+| `AuditLog` | Jurnal general de actiuni (CRUD, login, audit) |
+
+---
+
+## Bibliografie
+
+### Standarde si Framework-uri de Securitate
+
+1. **MITRE ATT&CK for Enterprise** — Framework de tactici si tehnici ale adversarilor. [https://attack.mitre.org/](https://attack.mitre.org/)
+2. **NIST SP 800-53 Rev. 5** — Security and Privacy Controls for Information Systems and Organizations. [https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final](https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final)
+3. **Directiva NIS2 (EU 2022/2555)** — Measures for a high common level of cybersecurity across the Union. [https://eur-lex.europa.eu/eli/dir/2022/2555/oj](https://eur-lex.europa.eu/eli/dir/2022/2555/oj)
+4. **SLSA (Supply-chain Levels for Software Artifacts)** — Framework pentru integritatea supply chain. [https://slsa.dev/](https://slsa.dev/)
+
+### Tehnologii Backend
+
+5. **Node.js** — Runtime JavaScript server-side bazat pe V8. [https://nodejs.org/](https://nodejs.org/)
+6. **Express.js** — Framework web minimalist pentru Node.js. [https://expressjs.com/](https://expressjs.com/)
+7. **Prisma** — ORM type-safe pentru Node.js si TypeScript. [https://www.prisma.io/](https://www.prisma.io/)
+8. **PostgreSQL** — Sistem de gestiune relational open-source. [https://www.postgresql.org/](https://www.postgresql.org/)
+9. **Socket.IO** — Librarie pentru comunicare bidirectionala real-time. [https://socket.io/](https://socket.io/)
+10. **JSON Web Tokens (RFC 7519)** — Standard pentru token-uri de autentificare. [https://datatracker.ietf.org/doc/html/rfc7519](https://datatracker.ietf.org/doc/html/rfc7519)
+11. **bcrypt** — Functie de hash pentru parole, bazata pe Blowfish. [https://en.wikipedia.org/wiki/Bcrypt](https://en.wikipedia.org/wiki/Bcrypt)
+12. **Passport.js** — Middleware de autentificare pentru Node.js. [https://www.passportjs.org/](https://www.passportjs.org/)
+
+### Tehnologii Frontend
+
+13. **React 18** — Librarie JavaScript pentru construirea interfetelor utilizator. [https://react.dev/](https://react.dev/)
+14. **Vite** — Build tool si dev server rapid. [https://vitejs.dev/](https://vitejs.dev/)
+15. **jsPDF** — Generare documente PDF din JavaScript pe client. [https://github.com/parallax/jsPDF](https://github.com/parallax/jsPDF)
+16. **Material Symbols** — Set de iconite Google Fonts. [https://fonts.google.com/icons](https://fonts.google.com/icons)
+
+### Tehnologii Agent
+
+17. **Go (Golang)** — Limbaj de programare compilat, performant, dezvoltat de Google. [https://go.dev/](https://go.dev/)
+18. **Cobra** — Framework pentru aplicatii CLI in Go. [https://github.com/spf13/cobra](https://github.com/spf13/cobra)
+19. **gopsutil** — Librarie Go cross-platform pentru metrici de sistem. [https://github.com/shirou/gopsutil](https://github.com/shirou/gopsutil)
+20. **crypto/x509, crypto/rsa** — Pachete standard Go pentru operatii criptografice (generare chei, semnare, verificare). [https://pkg.go.dev/crypto](https://pkg.go.dev/crypto)
+
+### Infrastructura
+
+21. **Docker** — Platforma de containerizare. [https://www.docker.com/](https://www.docker.com/)
+22. **Docker Compose** — Tool pentru definirea si rularea aplicatiilor multi-container. [https://docs.docker.com/compose/](https://docs.docker.com/compose/)
+23. **Nginx** — Server web si reverse proxy. [https://nginx.org/](https://nginx.org/)
+
+---
+
+Toate componentele externe sunt utilizate conform licentelor lor (MIT, Apache 2.0, BSD).

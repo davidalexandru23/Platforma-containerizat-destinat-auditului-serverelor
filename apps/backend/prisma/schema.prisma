@@ -1,17 +1,16 @@
-// Prisma Schema pentru Platforma Audit Servere
-// Generator si datasource
+// Schema Prisma pentru Platforma Audit Servere
+// Configurare generator si sursa date
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
-  // URL is configured in prisma.config.ts
 }
 
-// ==================== AUTH & USERS ====================
+// ==================== AUTENTIFICARE SI UTILIZATORI ====================
 
 model User {
   id            String          @id @default(uuid())
@@ -33,9 +32,9 @@ model User {
 
 model Role {
   id          String   @id @default(uuid())
-  name        String   @unique
+  name        String   @unique // ADMIN, AUDITOR, VIEWER
   description String?
-  permissions Json     @default("[]")
+  permissions String[] // capabilitati globale
   users       User[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -48,40 +47,30 @@ model RefreshToken {
   token     String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent String?
+  ipAddress String?
   expiresAt DateTime
   createdAt DateTime @default(now())
 
+  @@index([userId])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
-model Permission {
-  id           String    @id @default(uuid())
-  userId       String
-  serverId     String
-  capabilities Json      @default("[]")
-  expiresAt    DateTime?
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  server       Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  createdAt    DateTime  @default(now())
-
-  @@unique([userId, serverId])
-  @@map("permissions")
-}
-
-// ==================== SERVERS & AGENTS ====================
+// ==================== SERVER SI AGENT ====================
 
 model Server {
   id                 String              @id @default(uuid())
   name               String
-  hostname           String?
+  hostname           String
   ipAddress          String?
   description        String?
-  status             ServerStatus        @default(PENDING_ENROLLMENT)
-  riskLevel          String?
+  status             ServerStatus        @default(PENDING)
+  riskLevel          String?             // critical, high, medium, low
   agentIdentity      AgentIdentity?
+  permissions        Permission[]
   inventorySnapshots InventorySnapshot[]
   metricSamples      MetricSample[]
-  permissions        Permission[]
   auditRuns          AuditRun[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
@@ -89,129 +78,84 @@ model Server {
   @@map("servers")
 }
 
-enum ServerStatus {
-  PENDING_ENROLLMENT
-  ENROLLED
-  ONLINE
-  OFFLINE
-  MAINTENANCE
-}
-
 model AgentIdentity {
-  id          String   @id @default(uuid())
-  serverId    String   @unique
-  server      Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  enrollToken String?  @unique
-  agentToken  String?  @unique
-  version     String?
-  osInfo      String?
-  lastSeen    DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String    @id @default(uuid())
+  serverId          String    @unique
+  server            Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  enrollToken       String?   @unique
+  agentToken        String?   @unique // hash SHA-256 al token-ului
+  version           String?
+  osInfo            String?
+  publicKey         String?   // certificat PEM agent (sursa cheii publice)
+  certificateSerial String?   // serial certificat emis
+  lastSeen          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@map("agent_identities")
 }
 
-model InventorySnapshot {
-  id        String   @id @default(uuid())
-  serverId  String
-  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  osInfo    Json?
-  packages  Json?
-  services  Json?
-  ports     Json?
-  processes Json?
-  sshConfig Json?
-  sysctl    Json?
-  firewall  Json?
-  users     Json?
-  createdAt DateTime @default(now())
+model Permission {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serverId     String
+  server       Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  capabilities String[] // vizualizare, rulare audit, etc
+  expiresAt    DateTime? // pentru acces JIT
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  @@index([serverId, createdAt(sort: Desc)])
-  @@map("inventory_snapshots")
+  @@unique([userId, serverId])
+  @@map("permissions")
 }
 
-model MetricSample {
-  id               String   @id @default(uuid())
-  serverId         String
-  server           Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  cpuPercent       Float?
-  memUsedBytes     BigInt?
-  memTotalBytes    BigInt?
-  diskUsedBytes    BigInt?
-  diskTotalBytes   BigInt?
-  netInBytes       BigInt?
-  netOutBytes      BigInt?
-  loadAvg1         Float?
-  loadAvg5         Float?
-  loadAvg15        Float?
-  topProcesses     Json?
-  openPortsSummary Json?
-  createdAt        DateTime @default(now())
-
-  @@index([serverId, createdAt(sort: Desc)])
-  @@map("metric_samples")
-}
-
-// ==================== TEMPLATES ====================
+// ==================== SABLOANE SI CONTROALE ====================
 
 model Template {
   id          String            @id @default(uuid())
   name        String
   description String?
-  type        TemplateType      @default(CUSTOM)
+  type        TemplateType
   isBuiltIn   Boolean           @default(false)
-  createdBy   String?
-  creator     User?             @relation("TemplateCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   versions    TemplateVersion[]
+  createdBy   String?
+  creator     User?             @relation("TemplateCreator", fields: [createdBy], references: [id])
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
   @@map("templates")
 }
 
-enum TemplateType {
-  CIS_BENCHMARK
-  CIS_CONTROLS
-  CUSTOM
-}
-
 model TemplateVersion {
-  id         String    @id @default(uuid())
+  id         String     @id @default(uuid())
   templateId String
-  template   Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   Template   @relation(fields: [templateId], references: [id], onDelete: Cascade)
   version    String
   changelog  String?
-  isActive   Boolean   @default(true)
   controls   Control[]
   auditRuns  AuditRun[]
-  createdAt  DateTime  @default(now())
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
 
+  @@unique([templateId, version])
   @@map("template_versions")
 }
 
 model Control {
-  id              String           @id @default(uuid())
+  id                String           @id @default(uuid())
   templateVersionId String
-  templateVersion TemplateVersion  @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
-  controlId       String
-  title           String
-  category        String
-  severity        Severity         @default(MEDIUM)
-  rationale       String?
-  automatedChecks AutomatedCheck[]
-  manualChecks    ManualCheck[]
-  createdAt       DateTime         @default(now())
+  templateVersion   TemplateVersion  @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
+  controlId         String // e.g. "1.1.1"
+  title             String
+  category          String
+  severity          Severity
+  rationale         String?
+  automatedChecks   AutomatedCheck[]
+  manualChecks      ManualCheck[]
 
+  @@unique([templateVersionId, controlId])
   @@map("controls")
-}
-
-enum Severity {
-  CRITICAL
-  HIGH
-  MEDIUM
-  LOW
-  INFO
 }
 
 model AutomatedCheck {
@@ -221,49 +165,19 @@ model AutomatedCheck {
   checkId        String
   title          String
   description    String?
-  command        String?
-  script         String?
+  command        String? // comanda executie agent
+  script         String? // script mai complex
   expectedResult String?
-  checkType      CheckType     @default(COMMAND)
-  comparison     Comparison    @default(EQUALS)
-  parser         Parser        @default(RAW)
-  normalize      Json          @default("[]")
+  checkType      String? // COMMAND, SCRIPT, FILE_CHECK, etc
+  comparison     String?   @default("EQUALS") // EQUALS, CONTAINS, REGEX, NUM_EQ, NUM_GE, NUM_LE, EXIT_CODE
+  parser         String?   @default("RAW") // RAW, INT, JSON, FIRST_LINE
+  normalize      Json?     // Array string-uri (ex: "TRIM")
   onFailMessage  String?
-  platformScope  Json          @default("[]")
+  platformScope  Json?     // Array string-uri (ex: "ubuntu")
   checkResults   CheckResult[]
-  createdAt      DateTime      @default(now())
 
+  @@unique([controlId, checkId])
   @@map("automated_checks")
-}
-
-enum CheckType {
-  COMMAND
-  SCRIPT
-  FILE_CHECK
-  SERVICE_STATUS
-  PACKAGE_VERSION
-  SYSCTL
-  CUSTOM
-}
-
-enum Comparison {
-  EQUALS
-  NOT_EQUALS
-  CONTAINS
-  NOT_CONTAINS
-  REGEX_MATCH
-  GREATER_THAN
-  LESS_THAN
-  EXISTS
-  NOT_EXISTS
-}
-
-enum Parser {
-  RAW
-  JSON
-  SPLIT_LINES
-  KEY_VALUE
-  TRIM
 }
 
 model ManualCheck {
@@ -276,57 +190,246 @@ model ManualCheck {
   instructions String?
   evidenceSpec EvidenceSpec?
   taskResults  ManualTaskResult[]
-  createdAt    DateTime           @default(now())
 
+  @@unique([controlId, checkId])
   @@map("manual_checks")
 }
 
 model EvidenceSpec {
-  id                String      @id @default(uuid())
-  manualCheckId     String      @unique
-  manualCheck       ManualCheck @relation(fields: [manualCheckId], references: [id], onDelete: Cascade)
-  allowUpload       Boolean     @default(true)
-  allowLink         Boolean     @default(true)
-  allowAttestation  Boolean     @default(true)
-  requiresApproval  Boolean     @default(false)
-  acceptedFileTypes Json        @default("[]")
-  createdAt         DateTime    @default(now())
+  id               String      @id @default(uuid())
+  manualCheckId    String      @unique
+  manualCheck      ManualCheck @relation(fields: [manualCheckId], references: [id], onDelete: Cascade)
+  allowUpload      Boolean     @default(true)
+  allowLink        Boolean     @default(true)
+  allowAttestation Boolean     @default(true)
+  requiresApproval Boolean     @default(false)
+  acceptedFileTypes String[]   @default([])
 
   @@map("evidence_specs")
 }
 
-// ==================== AUDIT RUNS ====================
+// ==================== EXECUTARE AUDIT ====================
 
 model AuditRun {
-  id                        String             @id @default(uuid())
-  serverId                  String
-  server                    Server             @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  templateVersionId         String
-  templateVersion           TemplateVersion    @relation(fields: [templateVersionId], references: [id])
-  status                    AuditStatus        @default(PENDING)
-  triggeredBy               String?
-  excludedControlIds        Json               @default("[]")
+  id                         String             @id @default(uuid())
+  serverId                   String
+  server                     Server             @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  templateVersionId          String
+  templateVersion            TemplateVersion    @relation(fields: [templateVersionId], references: [id])
+  status                     AuditStatus        @default(PENDING)
+  triggeredBy                String?
+  excludedControlIds         String[]           @default([])
+  startedAt                  DateTime?
+  completedAt                DateTime?
   automatedCompliancePercent Float?
-  manualCompletionPercent   Float?
-  overallStatus             ComplianceStatus?
-  startedAt                 DateTime?
-  completedAt               DateTime?
-  checkResults              CheckResult[]
-  manualTaskResults         ManualTaskResult[]
-  createdAt                 DateTime           @default(now())
-  updatedAt                 DateTime           @updatedAt
+  manualCompletionPercent    Float?
+  overallStatus              ComplianceStatus?
+  checkResults               CheckResult[]
+  manualTaskResults          ManualTaskResult[]
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
 
-  @@index([serverId, createdAt(sort: Desc)])
+  @@index([serverId])
+  @@index([status])
   @@map("audit_runs")
+}
+
+model CheckResult {
+  id               String         @id @default(uuid())
+  auditRunId       String
+  auditRun         AuditRun       @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  automatedCheckId String
+  automatedCheck   AutomatedCheck @relation(fields: [automatedCheckId], references: [id])
+  status           CheckStatus
+  output           String?
+  errorMessage     String?
+  executedAt       DateTime       @default(now())
+  // Chain of Custody
+  outputHash       String?        // SHA-256 al output-ului
+  execTimestamp    DateTime?      // momentul exact executie pe agent
+  execHostname     String?        // hostname masina unde s-a executat
+  execUser         String?        // userul care a executat comanda
+  exitCode         Int?           // exit code comanda
+  signature        String?        // semnatura digitala agent
+  verified         Boolean        @default(false) // verificare semnatura reusita
+
+  @@unique([auditRunId, automatedCheckId])
+  @@map("check_results")
+}
+
+model ManualTaskResult {
+  id            String           @id @default(uuid())
+  auditRunId    String
+  auditRun      AuditRun         @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  manualCheckId String
+  manualCheck   ManualCheck      @relation(fields: [manualCheckId], references: [id])
+  status        ManualTaskStatus @default(PENDING)
+  evidence      Evidence[]
+  assignedTo    String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  reviewNotes   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([auditRunId, manualCheckId])
+  @@map("manual_task_results")
+}
+
+model Evidence {
+  id                 String           @id @default(uuid())
+  manualTaskResultId String
+  manualTaskResult   ManualTaskResult @relation(fields: [manualTaskResultId], references: [id], onDelete: Cascade)
+  type               EvidenceType
+  filePath           String?
+  fileName           String?
+  fileSize           Int?
+  mimeType           String?
+  fileHash           String? // SHA-256
+  link               String?
+  attestation        String?
+  uploadedBy         String
+  createdAt          DateTime         @default(now())
+
+  @@map("evidence")
+}
+
+// ==================== INVENTAR SI METRICI ====================
+
+model InventorySnapshot {
+  id        String   @id @default(uuid())
+  serverId  String
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  osInfo    Json? // distributie, versiune, kernel
+  packages  Json? // lista pachete
+  services  Json? // lista servicii
+  ports     Json? // porturi deschise
+  processes Json? // procese active
+  sshConfig Json? // config SSH
+  sysctl    Json? // valori sysctl
+  firewall  Json? // reguli firewall
+  users     Json? // useri sistem
+  createdAt DateTime @default(now())
+
+  @@index([serverId, createdAt])
+  @@map("inventory_snapshots")
+}
+
+model MetricSample {
+  id               String   @id @default(uuid())
+  serverId         String
+  server           Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  cpuPercent       Float
+  memUsedBytes     BigInt
+  memTotalBytes    BigInt
+  diskUsedBytes    BigInt
+  diskTotalBytes   BigInt
+  netInBytes       BigInt
+  netOutBytes      BigInt
+  loadAvg1         Float?
+  loadAvg5         Float?
+  loadAvg15        Float?
+  topProcesses     Json?
+  openPortsSummary Json?
+  createdAt        DateTime @default(now())
+
+  @@index([serverId, createdAt])
+  @@map("metric_samples")
+}
+
+// ==================== URMARIRE VULNERABILITATI ====================
+
+model VulnerabilityMatch {
+  id                  String   @id @default(uuid())
+  inventorySnapshotId String?
+  packageName         String
+  packageVersion      String
+  cveId               String
+  severity            Severity
+  description         String?
+  publishedAt         DateTime?
+  fixedVersion        String?
+  isEol               Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  @@index([packageName])
+  @@index([cveId])
+  @@map("vulnerability_matches")
+}
+
+// ==================== JURNAL AUDIT ====================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, RUN_AUDIT, etc
+  resource   String // User, Server, Template, AuditRun, etc
+  resourceId String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==================== ENUMS ====================
+
+enum ServerStatus {
+  PENDING
+  ENROLLED
+  ONLINE
+  OFFLINE
+  ERROR
+}
+
+enum TemplateType {
+  CIS_BENCHMARK
+  CIS_CONTROLS
+  NIS2
+  NIST
+  MITRE
+  SUPPLY_CHAIN
+  ISO27001
+  GDPR
+  PCI_DSS
+  CUSTOM
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
 }
 
 enum AuditStatus {
   PENDING
   RUNNING
-  IN_PROGRESS
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum CheckStatus {
+  PASS
+  FAIL
+  NA
+  ERROR
+}
+
+enum ManualTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  NOT_APPLICABLE
 }
 
 enum ComplianceStatus {
@@ -335,92 +438,8 @@ enum ComplianceStatus {
   NON_COMPLIANT
 }
 
-model CheckResult {
-  id               String         @id @default(uuid())
-  auditRunId       String
-  auditRun         AuditRun       @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
-  automatedCheckId String
-  automatedCheck   AutomatedCheck @relation(fields: [automatedCheckId], references: [id], onDelete: Cascade)
-  status           CheckStatus    @default(PENDING)
-  output           String?
-  errorMessage     String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@unique([auditRunId, automatedCheckId])
-  @@map("check_results")
-}
-
-enum CheckStatus {
-  PENDING
-  PASS
-  FAIL
-  ERROR
-  NA
-}
-
-model ManualTaskResult {
-  id            String           @id @default(uuid())
-  auditRunId    String
-  auditRun      AuditRun         @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
-  manualCheckId String
-  manualCheck   ManualCheck      @relation(fields: [manualCheckId], references: [id], onDelete: Cascade)
-  status        ManualTaskStatus @default(PENDING)
-  reviewedBy    String?
-  reviewedAt    DateTime?
-  reviewNotes   String?
-  evidence      Evidence[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-
-  @@unique([auditRunId, manualCheckId])
-  @@map("manual_task_results")
-}
-
-enum ManualTaskStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  REJECTED
-}
-
-model Evidence {
-  id                   String           @id @default(uuid())
-  manualTaskResultId   String
-  manualTaskResult     ManualTaskResult @relation(fields: [manualTaskResultId], references: [id], onDelete: Cascade)
-  type                 EvidenceType
-  filePath             String?
-  fileName             String?
-  fileSize             Int?
-  mimeType             String?
-  fileHash             String?
-  link                 String?
-  attestation          String?
-  uploadedBy           String?
-  createdAt            DateTime         @default(now())
-
-  @@map("evidence")
-}
-
 enum EvidenceType {
   UPLOAD
   LINK
   ATTESTATION
-}
-
-// ==================== AUDIT LOG ====================
-
-model AuditLog {
-  id         String   @id @default(uuid())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String
-  resource   String
-  resourceId String?
-  details    Json?
-  ipAddress  String?
-  createdAt  DateTime @default(now())
-
-  @@index([createdAt(sort: Desc)])
-  @@map("audit_logs")
 }

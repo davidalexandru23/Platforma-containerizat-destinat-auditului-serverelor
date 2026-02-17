@@ -16,7 +16,7 @@ function AuditDetail() {
     useEffect(() => {
         loadAudit();
 
-        // Configurare Socket IO
+        // configurare socket io
         const token = localStorage.getItem('token');
         const socket = io(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/ws/audit`, {
             transports: ['websocket'],
@@ -29,9 +29,8 @@ function AuditDetail() {
         });
 
         socket.on('checkResult', (data) => {
-            // Optional: actualizare in timp real, momentan doar jurnalizare
+            // actualizare in timp real
             console.log('New result:', data);
-            // S-ar putea declansa actualizare partiala aici daca este necesar
         });
 
         socket.on('progress', (data) => {
@@ -41,7 +40,7 @@ function AuditDetail() {
             }
         });
 
-        // Plan de rezerva: ascultare eveniment schimbare status daca backend-ul il trimite
+        // fallback: ascultare schimbare status
         socket.on('statusChange', (data) => {
             if (data.status === 'COMPLETED') {
                 loadAudit();
@@ -53,12 +52,12 @@ function AuditDetail() {
         };
     }, [id]);
 
-    // Fallback polling: daca ruleaza, verificare la fiecare 2 secunde
+    // fallback polling: verificare la 2 secunde
     useEffect(() => {
         let interval;
         if (audit && (audit.status === 'RUNNING' || audit.status === 'PENDING')) {
             interval = setInterval(() => {
-                // Actualizare silentioasa (fundal)
+                // actualizare silentioasa (fundal)
                 auditApi.getById(id).then(data => {
                     if (data.status !== audit.status) {
                         setAudit(data);
@@ -76,7 +75,7 @@ function AuditDetail() {
 
     const loadAudit = async () => {
         try {
-            // Nu setam loading pe true la actualizari in fundal pentru a evita palpairea UI
+            // nu activam loading la actualizari fundal
             if (!audit) setLoading(true);
 
             const data = await auditApi.getById(id);
@@ -95,11 +94,22 @@ function AuditDetail() {
         try {
             const { jsPDF } = await import('jspdf');
 
-            const passCount = audit.checkResults?.filter(r => r.status === 'PASS').length || 0;
-            const failCount = audit.checkResults?.filter(r => r.status === 'FAIL').length || 0;
-            const errorCount = audit.checkResults?.filter(r => r.status === 'ERROR').length || 0;
-            const totalChecks = audit.checkResults?.length || 0;
-            const score = audit.automatedCompliancePercent?.toFixed(1) || 0;
+            const totalAutomated = audit.checkResults?.length || 0;
+            const totalManual = audit.manualTaskResults?.length || 0;
+            const totalChecks = totalAutomated + totalManual;
+
+            const passAutomated = audit.checkResults?.filter(r => r?.status === 'PASS').length || 0;
+            const passManual = audit.manualTaskResults?.filter(r => r?.status === 'COMPLETED').length || 0;
+            const passCount = passAutomated + passManual;
+            const totalPassed = passCount;
+
+            const failAutomated = audit.checkResults?.filter(r => r?.status === 'FAIL').length || 0;
+            const failManual = audit.manualTaskResults?.filter(r => r?.status === 'REJECTED').length || 0;
+            const failCount = failAutomated + failManual;
+
+            const errorCount = audit.checkResults?.filter(r => r?.status === 'ERROR').length || 0;
+
+            const score = totalChecks > 0 ? ((totalPassed / totalChecks) * 100).toFixed(1) : 0;
 
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
@@ -150,64 +160,141 @@ function AuditDetail() {
             doc.text(`Detalii Verificari (${totalChecks} total)`, 15, y);
             y += 8;
 
+            // Configurare coloane - Latime totala disponibila aprox 180 (210 - 15 - 15)
+            const colWidths = {
+                id: 20,
+                check: 80,
+                status: 25,
+                output: 55
+            };
+            const colX = {
+                id: 15,
+                check: 35,
+                status: 115,
+                output: 140
+            };
+
             // antet tabel
             doc.setFillColor(243, 244, 246); // #f3f4f6
             doc.rect(15, y, pageWidth - 30, 8, 'F');
             doc.setFontSize(9);
             doc.setTextColor(55, 65, 81);
-            doc.text('ID', 17, y + 5.5);
-            doc.text('Verificare', 45, y + 5.5);
-            doc.text('Status', 130, y + 5.5);
-            doc.text('Output', 155, y + 5.5);
+            doc.text('ID', colX.id + 2, y + 5.5);
+            doc.text('Verificare', colX.check + 2, y + 5.5);
+            doc.text('Status', colX.status + 2, y + 5.5);
+            doc.text('Output', colX.output + 2, y + 5.5);
             y += 10;
 
             // randuri tabel
             doc.setFontSize(8);
-            audit.checkResults?.forEach((r, i) => {
-                if (y > 270) {
-                    doc.addPage();
-                    y = 20;
-                }
 
-                const rowHeight = 7;
+            const drawTableContent = (items, isManual = false) => {
+                items.forEach((r, i) => {
+                    // Pregatire date
+                    let idText, titleText, statusText, outputText, notesText;
+                    let statusColor = [107, 114, 128]; // Default gray
 
-                // fundal alternativ
-                if (i % 2 === 0) {
-                    doc.setFillColor(249, 250, 251);
-                    doc.rect(15, y - 4, pageWidth - 30, rowHeight, 'F');
-                }
+                    if (!isManual) {
+                        // Automated Check
+                        idText = (r.automatedCheck?.control?.controlId || r.automatedCheck?.checkId || '-').substring(0, 8);
+                        titleText = r.automatedCheck?.title || 'N/A';
+                        statusText = r.status || '-';
+                        outputText = r.errorMessage || r.output || '-';
 
-                doc.setTextColor(107, 114, 128);
-                const checkId = r.automatedCheck?.control?.controlId || r.automatedCheck?.checkId || '-';
-                doc.text(checkId.substring(0, 8), 17, y);
+                        if (r.status === 'PASS') statusColor = [16, 185, 129];
+                        else if (r.status === 'FAIL') statusColor = [239, 68, 68];
+                        else statusColor = [245, 158, 11];
 
-                doc.setTextColor(31, 41, 55);
-                const title = r.automatedCheck?.title || 'N/A';
-                doc.text(title.substring(0, 45), 45, y);
+                    } else {
+                        // Manual Task
+                        idText = (r.manualCheck?.control?.controlId || r.manualCheck?.checkId || '-').substring(0, 10);
+                        titleText = r.manualCheck?.title || 'Task Manual';
+                        statusText = r.status === 'COMPLETED' ? 'PASSED' : r.status === 'REJECTED' ? 'FAILED' : r.status;
+                        notesText = r.reviewNotes || '-';
+                        outputText = notesText; // Refolosim logica de output pt comentarii
 
-                // status cu culoare
-                if (r.status === 'PASS') doc.setTextColor(16, 185, 129);
-                else if (r.status === 'FAIL') doc.setTextColor(239, 68, 68);
-                else doc.setTextColor(245, 158, 11);
-                doc.text(r.status || '-', 130, y);
+                        if (r.status === 'COMPLETED') statusColor = [16, 185, 129];
+                        else if (r.status === 'REJECTED') statusColor = [239, 68, 68];
+                        else statusColor = [245, 158, 11];
+                    }
 
-                doc.setTextColor(107, 114, 128);
-                const output = (r.errorMessage || r.output || '-').substring(0, 35);
-                doc.text(output, 155, y);
+                    // Calcul inaltimi dinamice
+                    const idLines = doc.splitTextToSize(idText, colWidths.id - 2);
+                    const titleLines = doc.splitTextToSize(titleText, colWidths.check - 4);
+                    const statusLines = doc.splitTextToSize(statusText, colWidths.status - 2);
+                    const outputLines = doc.splitTextToSize(outputText, colWidths.output - 2);
 
-                y += rowHeight;
-            });
+                    const maxLines = Math.max(idLines.length, titleLines.length, statusLines.length, outputLines.length);
+                    const lineHeight = 4; // Inaltime per linie text
+                    const padding = 4; // Spatiere sus/jos
+                    const rowHeight = (maxLines * lineHeight) + padding;
+
+                    // Verificare Page Break
+                    if (y + rowHeight > 280) {
+                        doc.addPage();
+                        y = 20;
+                        // Re-desenare header tabel (optional, dar util)
+                        if (isManual) {
+                            doc.setFontSize(12);
+                            doc.setTextColor(55, 65, 81);
+                            doc.text(`Task-uri Manuale (continuare)`, 15, y);
+                            y += 8;
+                        }
+
+                        doc.setFillColor(243, 244, 246);
+                        doc.rect(15, y, pageWidth - 30, 8, 'F');
+                        doc.setFontSize(9);
+                        doc.setTextColor(55, 65, 81);
+                        doc.text('ID', colX.id + 2, y + 5.5);
+                        doc.text(isManual ? 'Task' : 'Verificare', colX.check + 2, y + 5.5);
+                        doc.text('Status', colX.status + 2, y + 5.5);
+                        doc.text(isManual ? 'Comentarii' : 'Output', colX.output + 2, y + 5.5);
+                        y += 10;
+                        doc.setFontSize(8);
+                    }
+
+                    // Fundal alternativ
+                    if (i % 2 === 0) {
+                        doc.setFillColor(249, 250, 251);
+                        doc.rect(15, y, pageWidth - 30, rowHeight, 'F');
+                    }
+
+                    // Desenare text
+                    doc.setTextColor(107, 114, 128);
+                    doc.text(idLines, colX.id + 2, y + 4);
+
+                    doc.setTextColor(31, 41, 55);
+                    doc.text(titleLines, colX.check + 2, y + 4);
+
+                    doc.setTextColor(...statusColor);
+                    doc.text(statusLines, colX.status + 2, y + 4);
+
+                    doc.setTextColor(107, 114, 128);
+                    doc.text(outputLines, colX.output + 2, y + 4);
+
+                    // Linie delimitare (optional)
+                    // doc.setDrawColor(229, 231, 235);
+                    // doc.line(15, y + rowHeight, pageWidth - 15, y + rowHeight);
+
+                    y += rowHeight;
+                });
+            };
+
+            if (audit.checkResults?.length > 0) {
+                drawTableContent(audit.checkResults, false);
+            }
 
             // Sectiune task-uri manuale
             const manualTasks = audit.manualTaskResults || [];
             if (manualTasks.length > 0) {
-                // Verificare daca este necesara o pagina noua
-                if (y > 230) {
+                // Verificare daca este necesara o pagina noua pentru titlu
+                if (y > 250) {
                     doc.addPage();
                     y = 20;
+                } else {
+                    y += 10;
                 }
 
-                y += 10;
                 doc.setFontSize(12);
                 doc.setTextColor(55, 65, 81);
                 doc.text(`Task-uri Manuale (${manualTasks.length} total)`, 15, y);
@@ -218,49 +305,15 @@ function AuditDetail() {
                 doc.rect(15, y, pageWidth - 30, 8, 'F');
                 doc.setFontSize(9);
                 doc.setTextColor(55, 65, 81);
-                doc.text('ID', 17, y + 5.5);
-                doc.text('Task', 40, y + 5.5);
-                doc.text('Status', 120, y + 5.5);
-                doc.text('Comentarii', 145, y + 5.5);
+                doc.text('ID', colX.id + 2, y + 5.5);
+                doc.text('Task', colX.check + 2, y + 5.5);
+                doc.text('Status', colX.status + 2, y + 5.5);
+                doc.text('Comentarii', colX.output + 2, y + 5.5);
                 y += 10;
 
-                // randuri task-uri manuale
+                // randuri task-uri manuale folosind functia comuna
                 doc.setFontSize(8);
-                manualTasks.forEach((task, i) => {
-                    if (y > 270) {
-                        doc.addPage();
-                        y = 20;
-                    }
-
-                    const rowHeight = 7;
-
-                    if (i % 2 === 0) {
-                        doc.setFillColor(249, 250, 251);
-                        doc.rect(15, y - 4, pageWidth - 30, rowHeight, 'F');
-                    }
-
-                    doc.setTextColor(107, 114, 128);
-                    const checkId = task.manualCheck?.control?.controlId || task.manualCheck?.checkId || '-';
-                    doc.text(checkId.substring(0, 10), 17, y);
-
-                    doc.setTextColor(31, 41, 55);
-                    const title = task.manualCheck?.title || 'Task Manual';
-                    doc.text(title.substring(0, 40), 40, y);
-
-                    // status cu culoare
-                    const status = task.status === 'COMPLETED' ? 'PASSED' :
-                        task.status === 'REJECTED' ? 'FAILED' : task.status;
-                    if (task.status === 'COMPLETED') doc.setTextColor(16, 185, 129);
-                    else if (task.status === 'REJECTED') doc.setTextColor(239, 68, 68);
-                    else doc.setTextColor(245, 158, 11);
-                    doc.text(status, 120, y);
-
-                    doc.setTextColor(107, 114, 128);
-                    const notes = (task.reviewNotes || '-').substring(0, 30);
-                    doc.text(notes, 145, y);
-
-                    y += rowHeight;
-                });
+                drawTableContent(manualTasks, true);
             }
 
             // subsol
@@ -322,19 +375,27 @@ function AuditDetail() {
     }
 
     const isRunning = audit.status === 'RUNNING' || audit.status === 'PENDING';
-    const passCount = audit.checkResults?.filter(r => r.status === 'PASS').length || 0;
-    const failCount = audit.checkResults?.filter(r => r.status === 'FAIL').length || 0;
-    const errorCount = audit.checkResults?.filter(r => r.status === 'ERROR').length || 0;
-    const totalChecks = audit.checkResults?.length || 0;
+    const totalAutomated = audit.checkResults?.length || 0;
+    const totalManual = audit.manualTaskResults?.length || 0;
+    const totalChecks = totalAutomated + totalManual;
 
-    // Contoare task-uri manuale
-    const manualTasks = audit.manualTaskResults || [];
-    const totalManual = manualTasks.length;
-    const completedManual = manualTasks.filter(t => t.status === 'COMPLETED' || t.status === 'REJECTED').length;
-    const pendingManual = totalManual - completedManual;
-    const allManualCompleted = totalManual > 0 && pendingManual === 0;
-    const manualPassCount = manualTasks.filter(t => t.status === 'COMPLETED').length;
-    const manualFailCount = manualTasks.filter(t => t.status === 'REJECTED').length;
+    // Contoare
+    const passAutomated = audit.checkResults?.filter(r => r?.status === 'PASS')?.length || 0;
+    const passManual = audit.manualTaskResults?.filter(r => r?.status === 'COMPLETED')?.length || 0;
+    const totalPassed = passAutomated + passManual;
+
+    const failAutomated = audit.checkResults?.filter(r => r?.status === 'FAIL')?.length || 0;
+    const failManual = audit.manualTaskResults?.filter(r => r?.status === 'REJECTED')?.length || 0;
+    const totalFailed = failAutomated + failManual;
+
+    const errorCount = audit.checkResults?.filter(r => r?.status === 'ERROR')?.length || 0;
+
+    // Calcul scor combinat
+    const combinedScore = totalChecks > 0 ? (totalPassed / totalChecks) * 100 : 0;
+
+    // Alias-uri pentru afisare progres sarcini manuale
+    const completedManual = passManual;
+    const allManualCompleted = totalManual > 0 && completedManual === totalManual;
 
     return (
         <div className="audit-detail-page" ref={reportRef}>
@@ -417,11 +478,11 @@ function AuditDetail() {
                             </div>
                             <div className="score-content">
                                 <span className="score-label">Scor Conformitate</span>
-                                <span className="score-value" style={{ color: getScoreColor(audit.automatedCompliancePercent) }}>
-                                    {audit.automatedCompliancePercent?.toFixed(1) || 0}%
+                                <span className="score-value" style={{ color: getScoreColor(combinedScore) }}>
+                                    {combinedScore.toFixed(1)}%
                                 </span>
                                 <div className="score-bar">
-                                    <div className="score-bar-fill" style={{ width: `${audit.automatedCompliancePercent || 0}%`, background: getScoreColor(audit.automatedCompliancePercent) }}></div>
+                                    <div className="score-bar-fill" style={{ width: `${combinedScore}%`, background: getScoreColor(combinedScore) }}></div>
                                 </div>
                             </div>
                         </div>
@@ -432,7 +493,7 @@ function AuditDetail() {
                             </div>
                             <div className="score-content">
                                 <span className="score-label">Verificari Trecute</span>
-                                <span className="score-value" style={{ color: 'var(--success)' }}>{passCount}</span>
+                                <span className="score-value" style={{ color: 'var(--success)' }}>{totalPassed}</span>
                                 <span className="score-desc">din {totalChecks} verificari</span>
                             </div>
                         </div>
@@ -443,7 +504,7 @@ function AuditDetail() {
                             </div>
                             <div className="score-content">
                                 <span className="score-label">Verificari Esuate</span>
-                                <span className="score-value" style={{ color: 'var(--danger)' }}>{failCount}</span>
+                                <span className="score-value" style={{ color: 'var(--danger)' }}>{totalFailed}</span>
                                 <span className="score-desc">necesita atentie</span>
                             </div>
                         </div>
@@ -461,21 +522,21 @@ function AuditDetail() {
                     </div>
 
                     {/* Banner Sumar */}
-                    <div className={`summary-banner ${audit.automatedCompliancePercent >= 80 ? 'success' : audit.automatedCompliancePercent >= 50 ? 'warning' : 'danger'}`}>
+                    <div className={`summary-banner ${combinedScore >= 80 ? 'success' : combinedScore >= 50 ? 'warning' : 'danger'}`}>
                         <span className="material-symbols-outlined">
-                            {audit.automatedCompliancePercent >= 80 ? 'shield_with_heart' : audit.automatedCompliancePercent >= 50 ? 'gpp_maybe' : 'gpp_bad'}
+                            {combinedScore >= 80 ? 'shield_with_heart' : combinedScore >= 50 ? 'gpp_maybe' : 'gpp_bad'}
                         </span>
                         <div>
                             <strong>
-                                {audit.automatedCompliancePercent >= 80
+                                {combinedScore >= 80
                                     ? 'Buna conformitate cu standardele de securitate!'
-                                    : audit.automatedCompliancePercent >= 50
+                                    : combinedScore >= 50
                                         ? 'Conformitate partiala - se recomanda actiuni corective'
                                         : 'Atentie! Nivel scazut de conformitate - actiuni urgente necesare'}
                             </strong>
                             <p>
-                                {passCount} din {totalChecks} verificari au trecut.
-                                {failCount > 0 && ` ${failCount} verificari necesita remediere.`}
+                                {totalPassed} din {totalChecks} verificari au trecut.
+                                {totalFailed > 0 && ` ${totalFailed} verificari necesita remediere.`}
                             </p>
                         </div>
                     </div>
@@ -484,15 +545,15 @@ function AuditDetail() {
                     <div className="audit-tabs">
                         <button className={`tab ${activeTab === 'automated' ? 'active' : ''}`} onClick={() => setActiveTab('automated')}>
                             <span className="material-symbols-outlined">computer</span>
-                            Verificari Automate ({totalChecks})
+                            Verificari Automate ({totalAutomated})
                         </button>
                         <button className={`tab ${activeTab === 'failed' ? 'active' : ''}`} onClick={() => setActiveTab('failed')}>
                             <span className="material-symbols-outlined">warning</span>
-                            Doar Esuate ({failCount})
+                            Doar Esuate ({totalFailed})
                         </button>
                         <button className={`tab ${activeTab === 'manual' ? 'active' : ''}`} onClick={() => setActiveTab('manual')}>
                             <span className="material-symbols-outlined">person</span>
-                            Task-uri Manuale ({audit.manualTaskResults?.length || 0})
+                            Task-uri Manuale ({totalManual})
                         </button>
                     </div>
 
@@ -502,9 +563,21 @@ function AuditDetail() {
                             <CheckResultCard key={result.id} result={result} expanded={expandedCheck === idx} onToggle={() => setExpandedCheck(expandedCheck === idx ? null : idx)} />
                         ))}
 
-                        {activeTab === 'failed' && audit.checkResults?.filter(r => r.status === 'FAIL').map((result, idx) => (
-                            <CheckResultCard key={result.id} result={result} expanded={expandedCheck === `fail-${idx}`} onToggle={() => setExpandedCheck(expandedCheck === `fail-${idx}` ? null : `fail-${idx}`)} />
-                        ))}
+                        {activeTab === 'failed' && (
+                            <>
+                                {audit.checkResults?.filter(r => r?.status === 'FAIL')?.map((result, idx) => (
+                                    <CheckResultCard key={result?.id || idx} result={result} expanded={expandedCheck === `fail-${idx}`} onToggle={() => setExpandedCheck(expandedCheck === `fail-${idx}` ? null : `fail-${idx}`)} />
+                                ))}
+                                {audit.manualTaskResults?.filter(t => t?.status === 'REJECTED')?.map((task, idx) => (
+                                    <ManualTaskCard
+                                        key={task?.id || idx}
+                                        task={task}
+                                        auditRunId={audit.id}
+                                        onUpdate={loadAudit}
+                                    />
+                                ))}
+                            </>
+                        )}
 
                         {activeTab === 'manual' && (
                             audit.manualTaskResults?.length > 0 ? (
@@ -524,7 +597,7 @@ function AuditDetail() {
                             )
                         )}
 
-                        {activeTab === 'failed' && failCount === 0 && (
+                        {activeTab === 'failed' && totalFailed === 0 && (
                             <div className="empty-state-small success">
                                 <span className="material-symbols-outlined">celebration</span>
                                 <p>Excelent! Toate verificarile au trecut.</p>
@@ -538,9 +611,15 @@ function AuditDetail() {
 }
 
 function ManualTaskCard({ task, auditRunId, onUpdate }) {
+    if (!task) return null;
+
     const [expanded, setExpanded] = useState(false);
     const [notes, setNotes] = useState(task.reviewNotes || '');
     const [saving, setSaving] = useState(false);
+
+    const manualCheck = task.manualCheck || {};
+    const control = manualCheck.control || {};
+    const evidenceSpec = manualCheck.evidenceSpec || {};
 
     const handleMark = async (approved) => {
         setSaving(true);
@@ -587,9 +666,9 @@ function ManualTaskCard({ task, auditRunId, onUpdate }) {
         <div className={`check-result-card ${statusClass}`}>
             <div className="check-result-header" onClick={() => setExpanded(!expanded)}>
                 <div className="check-result-info">
-                    <span className="check-id">{task.manualCheck?.control?.controlId || task.manualCheck?.checkId || 'MANUAL'}</span>
-                    <h4>{task.manualCheck?.title || 'Task Manual'}</h4>
-                    <span className="check-category">{task.manualCheck?.control?.category || ''}</span>
+                    <span className="check-id">{control.controlId || manualCheck.checkId || 'MANUAL'}</span>
+                    <h4>{manualCheck.title || 'Task Manual'}</h4>
+                    <span className="check-category">{control.category || ''}</span>
                 </div>
                 <div className="check-result-status">
                     <span className={`badge badge-${statusClass || 'warning'}`}>
@@ -607,21 +686,21 @@ function ManualTaskCard({ task, auditRunId, onUpdate }) {
             {expanded && (
                 <div className="check-result-details">
                     {/* Instructiuni */}
-                    {task.manualCheck?.instructions && (
+                    {manualCheck.instructions && (
                         <div className="detail-row">
                             <span className="detail-label">Instructiuni:</span>
-                            <span className="detail-value">{task.manualCheck.instructions}</span>
+                            <span className="detail-value">{manualCheck.instructions}</span>
                         </div>
                     )}
 
                     {/* Specificatii Dovezi */}
-                    {task.manualCheck?.evidenceSpec && (
+                    {(evidenceSpec.allowUpload || evidenceSpec.allowLink || evidenceSpec.allowAttestation) && (
                         <div className="detail-row">
                             <span className="detail-label">Dovada acceptata:</span>
                             <span className="detail-value" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {task.manualCheck.evidenceSpec.allowUpload && <span className="badge badge-neutral">Upload fisier</span>}
-                                {task.manualCheck.evidenceSpec.allowLink && <span className="badge badge-neutral">Link extern</span>}
-                                {task.manualCheck.evidenceSpec.allowAttestation && <span className="badge badge-neutral">Atestare</span>}
+                                {evidenceSpec.allowUpload && <span className="badge badge-neutral">Upload fisier</span>}
+                                {evidenceSpec.allowLink && <span className="badge badge-neutral">Link extern</span>}
+                                {evidenceSpec.allowAttestation && <span className="badge badge-neutral">Atestare</span>}
                             </span>
                         </div>
                     )}
@@ -656,7 +735,7 @@ function ManualTaskCard({ task, auditRunId, onUpdate }) {
                         />
                     </div>
 
-                    {/* Butoane Actiune - afisare doar daca nu este deja marcat */}
+                    {/* Butoane Actiune (daca nu este marcat) */}
                     {task.status !== 'COMPLETED' && task.status !== 'REJECTED' && (
                         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
                             <button
@@ -690,7 +769,7 @@ function ManualTaskCard({ task, auditRunId, onUpdate }) {
                         </div>
                     )}
 
-                    {/* Afisare info revizuire si buton schimbare daca este deja marcat */}
+                    {/* Info revizuire si resetare */}
                     {(task.status === 'COMPLETED' || task.status === 'REJECTED') && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
                             {task.reviewedAt && (
@@ -725,15 +804,20 @@ function ManualTaskCard({ task, auditRunId, onUpdate }) {
 }
 
 function CheckResultCard({ result, expanded, onToggle }) {
+    if (!result) return null;
+
+    const automatedCheck = result.automatedCheck || {};
+    const control = automatedCheck.control || {};
+
     const statusClass = result.status === 'PASS' ? 'pass' : result.status === 'FAIL' ? 'fail' : 'error';
 
     return (
         <div className={`check-result-card ${statusClass}`} onClick={onToggle}>
             <div className="check-result-header">
                 <div className="check-result-info">
-                    <span className="check-id">{result.automatedCheck?.control?.controlId || result.automatedCheck?.checkId || '?'}</span>
-                    <h4>{result.automatedCheck?.title || 'Verificare'}</h4>
-                    <span className="check-category">{result.automatedCheck?.control?.category || ''}</span>
+                    <span className="check-id">{control.controlId || automatedCheck.checkId || '?'}</span>
+                    <h4>{automatedCheck.title || 'Verificare'}</h4>
+                    <span className="check-category">{control.category || ''}</span>
                 </div>
                 <div className="check-result-status">
                     <span className={`badge badge-${statusClass}`}>
@@ -750,22 +834,22 @@ function CheckResultCard({ result, expanded, onToggle }) {
 
             {expanded && (
                 <div className="check-result-details">
-                    {result.automatedCheck?.description && (
+                    {automatedCheck.description && (
                         <div className="detail-row">
                             <span className="detail-label">Descriere:</span>
-                            <span className="detail-value">{result.automatedCheck.description}</span>
+                            <span className="detail-value">{automatedCheck.description}</span>
                         </div>
                     )}
-                    {result.automatedCheck?.command && (
+                    {automatedCheck.command && (
                         <div className="detail-row">
                             <span className="detail-label">Comanda:</span>
-                            <code className="detail-code">{result.automatedCheck.command}</code>
+                            <code className="detail-code">{automatedCheck.command}</code>
                         </div>
                     )}
-                    {result.automatedCheck?.expectedResult && (
+                    {automatedCheck.expectedResult && (
                         <div className="detail-row">
                             <span className="detail-label">Rezultat Asteptat:</span>
-                            <code className="detail-code">{result.automatedCheck.expectedResult}</code>
+                            <code className="detail-code">{automatedCheck.expectedResult}</code>
                         </div>
                     )}
                     {result.output && (
@@ -780,10 +864,10 @@ function CheckResultCard({ result, expanded, onToggle }) {
                             <pre className="detail-output error">{result.errorMessage}</pre>
                         </div>
                     )}
-                    {result.automatedCheck?.onFailMessage && result.status === 'FAIL' && (
+                    {automatedCheck.onFailMessage && result.status === 'FAIL' && (
                         <div className="detail-row recommendation">
                             <span className="detail-label">Recomandare:</span>
-                            <span className="detail-value">{result.automatedCheck.onFailMessage}</span>
+                            <span className="detail-value">{automatedCheck.onFailMessage}</span>
                         </div>
                     )}
                 </div>
@@ -793,4 +877,3 @@ function CheckResultCard({ result, expanded, onToggle }) {
 }
 
 export default AuditDetail;
-

@@ -229,7 +229,7 @@ router.put('/:id/controls',
     async (req, res, next) => {
         try {
             const { controls } = req.body;
-            const result = await templatesService.updateControls(req.params.id, controls);
+            const result = await templatesService.updateControls(req.params.id, controls, req.user.role.name);
             res.json(result);
         } catch (error) {
             next(error);

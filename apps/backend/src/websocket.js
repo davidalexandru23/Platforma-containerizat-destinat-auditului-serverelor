@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import * as agentService from './services/agent.service.js';
 import * as auditService from './services/audit.service.js';
 import * as notificationService from './services/notification.service.js';
+import * as serversService from './services/servers.service.js';
 import { log } from './lib/logger.js';
 
 // Variabila globala pentru io
@@ -37,7 +38,7 @@ function setupWebSocket(ioInstance) {
     notificationService.setIO(io);
 
     // ========================================
-    // NAMESPACE: /ws/live - Live Metrics per Server
+    // NAMESPACE: /ws/live - Metrici Live per Server
     // ========================================
     const liveNamespace = io.of('/ws/live');
     liveNamespace.use(jwtAuth('/live'));
@@ -45,16 +46,31 @@ function setupWebSocket(ioInstance) {
     liveNamespace.on('connection', (socket) => {
         log.ws('/live', 'connect', socket.id.substring(0, 8));
 
-        socket.on('server:subscribe', (data) => {
+        socket.on('server:subscribe', async (data) => {
             const { serverId } = data;
+            // Verificare permisiuni acces server
+            if (socket.data.role !== 'ADMIN') {
+                const hasAccess = await serversService.checkAccess(socket.data.userId, serverId);
+                if (!hasAccess) {
+                    socket.emit('error', { message: 'Nu ai acces la acest server' });
+                    return;
+                }
+            }
             socket.join(`server:${serverId}`);
             log.ws('/live', 'subscribe', `server:${serverId?.substring(0, 8)}`);
             socket.emit('subscribed', { serverId });
         });
 
         // Suport mostenire (legacy)
-        socket.on('subscribe', (data) => {
+        socket.on('subscribe', async (data) => {
             const { serverId } = data;
+            if (socket.data.role !== 'ADMIN') {
+                const hasAccess = await serversService.checkAccess(socket.data.userId, serverId);
+                if (!hasAccess) {
+                    socket.emit('error', { message: 'Nu ai acces la acest server' });
+                    return;
+                }
+            }
             socket.join(`server:${serverId}`);
             log.ws('/live', 'subscribe', `server:${serverId?.substring(0, 8)}`);
             socket.emit('subscribed', { serverId });
@@ -78,7 +94,7 @@ function setupWebSocket(ioInstance) {
     });
 
     // ========================================
-    // NAMESPACE: /ws/audit - Audit Progress
+    // NAMESPACE: /ws/audit - Progres Audit
     // ========================================
     const auditNamespace = io.of('/ws/audit');
     auditNamespace.use(jwtAuth('/audit'));
@@ -105,7 +121,7 @@ function setupWebSocket(ioInstance) {
     });
 
     // ========================================
-    // NAMESPACE: /ws/notifications - Global Notifications
+    // NAMESPACE: /ws/notifications - Notificari Globale
     // ========================================
     const notificationsNamespace = io.of('/ws/notifications');
     notificationsNamespace.use(jwtAuth('/notifications'));
@@ -122,7 +138,7 @@ function setupWebSocket(ioInstance) {
     });
 
     // ========================================
-    // NAMESPACE: /ws/servers - Server List Status
+    // NAMESPACE: /ws/servers - Status Lista Servere
     // ========================================
     const serversNamespace = io.of('/ws/servers');
     serversNamespace.use(jwtAuth('/servers'));
@@ -142,7 +158,7 @@ function setupWebSocket(ioInstance) {
     });
 
     // ========================================
-    // NAMESPACE: /ws/activity - Live Activity Feed
+    // NAMESPACE: /ws/activity - Flux Activitate Live
     // ========================================
     const activityNamespace = io.of('/ws/activity');
     activityNamespace.use(jwtAuth('/activity'));

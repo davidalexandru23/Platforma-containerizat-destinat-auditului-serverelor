@@ -3,12 +3,12 @@ import path from 'path';
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError, BadRequestError } from '../middleware/error.middleware.js';
 import * as notificationService from './notification.service.js';
+import { validateAllCommands } from './commandValidator.service.js';
 
 async function findAll() {
     return prisma.template.findMany({
         include: {
             versions: {
-                where: { isActive: true },
                 orderBy: { createdAt: 'desc' },
                 take: 1,
                 include: { _count: { select: { controls: true } } },
@@ -63,11 +63,19 @@ async function create(data) {
     });
 }
 
-async function importJson(jsonData, userId) {
+async function importJson(jsonData, userId, isBuiltIn = false) {
     // Validare structura
     const validation = validateJson(jsonData);
     if (!validation.valid) {
         throw new BadRequestError(`Template JSON invalid: ${validation.errors.join(', ')}`);
+    }
+
+    // Validare comenzi din controale
+    const cmdValidation = validateAllCommands(jsonData.controls);
+    if (!cmdValidation.valid) {
+        const err = new BadRequestError('Template contine comenzi interzise');
+        err.commandErrors = cmdValidation.errors;
+        throw err;
     }
 
     const { metadata, controls } = jsonData;
@@ -79,10 +87,12 @@ async function importJson(jsonData, userId) {
             description: metadata.description,
             type: mapTemplateType(metadata.type),
             createdBy: userId,
+            isBuiltIn: isBuiltIn,
             versions: {
                 create: {
                     version: metadata.version || '1.0.0',
                     changelog: metadata.changelog,
+                    isActive: false,
                     controls: {
                         create: controls.map(control => ({
                             controlId: control.controlId,
@@ -138,6 +148,108 @@ async function importJson(jsonData, userId) {
     return { template, message: 'Template importat cu succes' };
 }
 
+async function importOrUpdatePredefinedTemplate(jsonData) {
+    // Validare structura
+    const validation = validateJson(jsonData);
+    if (!validation.valid) {
+        let msg = `Template JSON invalid: ${validation.errors.join(', ')}`;
+        if (validation.commandErrors && validation.commandErrors.length > 0) {
+            msg += ` | Command Errors: ${JSON.stringify(validation.commandErrors)}`;
+        }
+        throw new Error(msg);
+    }
+
+    const { metadata, controls } = jsonData;
+
+    // Cautare template existent
+    const existingTemplate = await prisma.template.findFirst({
+        where: { name: metadata.name },
+        include: { versions: true }
+    });
+
+    if (!existingTemplate) {
+        // Nu exista => Import normal (creare nou) ca BuiltIn
+        const result = await importJson(jsonData, null, true);
+        // Auto-publish predefined templates
+        if (result.template?.id) {
+            await publish(result.template.id);
+        }
+        return result;
+    }
+
+    // Asigurare ca este marcat ca built-in
+    if (!existingTemplate.isBuiltIn) {
+        await prisma.template.update({
+            where: { id: existingTemplate.id },
+            data: { isBuiltIn: true }
+        });
+    }
+
+    // Exista => Verificare versiune
+    const versionExists = existingTemplate.versions.some(v => v.version === metadata.version);
+    if (versionExists) {
+        return { message: `Versiunea ${metadata.version} exista deja`, skipped: true };
+    }
+
+    // Versiune noua => Adaugare TemplateVersion
+    console.log(`Updating template "${metadata.name}" to version ${metadata.version}`);
+
+    await prisma.templateVersion.create({
+        data: {
+            templateId: existingTemplate.id,
+            version: metadata.version,
+            changelog: metadata.changelog,
+            isActive: true, // Auto-activate new predefined versions
+            controls: {
+                create: controls.map(control => ({
+                    controlId: control.controlId,
+                    title: control.title,
+                    category: control.category,
+                    severity: control.severity,
+                    rationale: control.rationale,
+                    automatedChecks: {
+                        create: (control.automatedChecks || []).map(check => ({
+                            checkId: check.checkId,
+                            title: check.title,
+                            description: check.description,
+                            command: check.command,
+                            script: check.script,
+                            expectedResult: check.expectedResult,
+                            checkType: check.checkType,
+                            comparison: check.comparison || 'EQUALS',
+                            parser: check.parser || 'RAW',
+                            normalize: check.normalize || [],
+                            onFailMessage: check.onFailMessage,
+                            platformScope: check.platformScope || [],
+                        })),
+                    },
+                    manualChecks: {
+                        create: (control.manualChecks || []).map(check => ({
+                            checkId: check.checkId,
+                            title: check.title,
+                            description: check.description,
+                            instructions: check.instructions,
+                            evidenceSpec: check.evidenceSpec
+                                ? {
+                                    create: {
+                                        allowUpload: check.evidenceSpec.allowUpload ?? true,
+                                        allowLink: check.evidenceSpec.allowLink ?? true,
+                                        allowAttestation: check.evidenceSpec.allowAttestation ?? true,
+                                        requiresApproval: check.evidenceSpec.requiresApproval ?? false,
+                                        acceptedFileTypes: check.evidenceSpec.acceptedFileTypes || [],
+                                    },
+                                }
+                                : undefined,
+                        })),
+                    },
+                })),
+            },
+        },
+    });
+
+    return { message: `Updated to version ${metadata.version}`, updated: true };
+}
+
 function validateJson(data) {
     const errors = [];
 
@@ -167,10 +279,18 @@ function validateJson(data) {
         });
     }
 
+    // Validare comenzi din controale
+    let commandErrors = [];
+    if (data.controls && Array.isArray(data.controls)) {
+        const cmdValidation = validateAllCommands(data.controls);
+        commandErrors = cmdValidation.errors;
+    }
+
     return {
-        valid: errors.length === 0,
+        valid: errors.length === 0 && commandErrors.length === 0,
         errors,
-        summary: errors.length === 0 ? {
+        commandErrors,
+        summary: errors.length === 0 && commandErrors.length === 0 ? {
             name: data.metadata?.name,
             version: data.metadata?.version,
             controlsCount: data.controls?.length || 0,
@@ -258,7 +378,15 @@ async function getActiveVersion(templateId) {
     return version;
 }
 
-async function updateControls(id, controls) {
+async function updateControls(id, controls, userRole) {
+    // Validare comenzi inainte de salvare
+    const cmdValidation = validateAllCommands(controls);
+    if (!cmdValidation.valid) {
+        const err = new BadRequestError('Controalele contin comenzi interzise');
+        err.commandErrors = cmdValidation.errors;
+        throw err;
+    }
+
     const template = await prisma.template.findUnique({
         where: { id },
         include: { versions: { orderBy: { createdAt: 'desc' }, take: 1 } }
@@ -266,6 +394,12 @@ async function updateControls(id, controls) {
 
     if (!template) {
         throw new NotFoundError('Template nu exista');
+    }
+
+    // Restrictie editare template-uri predefinite (doar ADMIN)
+    if (template.isBuiltIn && userRole !== 'ADMIN') {
+        const { ForbiddenError } = await import('../middleware/error.middleware.js');
+        throw new ForbiddenError('Doar administratorii pot edita template-uri predefinite');
     }
 
     const latestVersion = template.versions[0];
@@ -292,6 +426,7 @@ async function updateControls(id, controls) {
                             title: check.title || 'Check',
                             command: check.command || '',
                             expectedResult: check.expectedResult || '',
+                            checkType: check.checkType,
                             comparison: check.comparison || 'EQUALS',
                             parser: check.parser || 'RAW',
                             normalize: check.normalize || [],
@@ -305,6 +440,17 @@ async function updateControls(id, controls) {
                             title: check.title || 'Manual Check',
                             description: check.description || '',
                             instructions: check.instructions || '',
+                            evidenceSpec: check.evidenceSpec
+                                ? {
+                                    create: {
+                                        allowUpload: check.evidenceSpec.allowUpload ?? true,
+                                        allowLink: check.evidenceSpec.allowLink ?? true,
+                                        allowAttestation: check.evidenceSpec.allowAttestation ?? true,
+                                        requiresApproval: check.evidenceSpec.requiresApproval ?? false,
+                                        acceptedFileTypes: check.evidenceSpec.acceptedFileTypes || [],
+                                    },
+                                }
+                                : undefined,
                         })),
                     },
                 })),
@@ -443,6 +589,13 @@ function mapTemplateType(type) {
     const typeMap = {
         CIS_BENCHMARK: 'CIS_BENCHMARK',
         CIS_CONTROLS: 'CIS_CONTROLS',
+        NIS2: 'NIS2',
+        NIST: 'NIST',
+        MITRE: 'MITRE',
+        SUPPLY_CHAIN: 'SUPPLY_CHAIN',
+        ISO27001: 'ISO27001',
+        GDPR: 'GDPR',
+        PCI_DSS: 'PCI_DSS',
         CUSTOM: 'CUSTOM',
     };
     return typeMap[type] || 'CUSTOM';
@@ -453,6 +606,7 @@ export {
     findById,
     create,
     importJson,
+    importOrUpdatePredefinedTemplate,
     validateJson,
     exportJson,
     getActiveVersion,

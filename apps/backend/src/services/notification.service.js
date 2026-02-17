@@ -48,7 +48,7 @@ function broadcastServerStatus(serverId, status, lastSeen, riskLevel = null) {
     });
 }
 
-// Broadcast activity event
+// Difuzare eveniment activitate
 function broadcastActivity(actor, action, entity, entityId, details = null) {
     if (!io) return;
 
@@ -62,7 +62,7 @@ function broadcastActivity(actor, action, entity, entityId, details = null) {
     });
 }
 
-// Broadcast server alert
+// Difuzare alerte server
 function broadcastServerAlert(serverId, type, message, severity) {
     if (!io) return;
 
@@ -75,7 +75,7 @@ function broadcastServerAlert(serverId, type, message, severity) {
     });
 }
 
-// Broadcast heartbeat
+// Difuzare heartbeat
 function broadcastHeartbeat(serverId, agentVersion, latencyMs) {
     if (!io) return;
 

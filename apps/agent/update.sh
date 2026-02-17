@@ -1,5 +1,5 @@
 #!/bin/bash
-# BitTrail Agent - Update Script
+# BitTrail Agent - Script Actualizare
 
 set -e
 
@@ -14,7 +14,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Detectare arhitectura sistem
+# Detectare arhitectura
 ARCH=$(uname -m)
 if [ "$ARCH" = "x86_64" ]; then
     AGENT_FILE="bittrail-agent-linux-amd64"
