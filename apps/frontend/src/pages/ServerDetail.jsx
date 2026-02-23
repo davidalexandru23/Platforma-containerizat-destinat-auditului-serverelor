@@ -454,7 +454,7 @@ bittrail-agent version`;
                                             </h3>
                                         </div>
                                         <span className="metric-change positive">
-                                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_down</span>
+                                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>horizontal_rule</span>
                                             Stabil
                                         </span>
                                     </div>
@@ -631,22 +631,99 @@ bittrail-agent version`;
                 {activeTab === 'inventory' && (
                     <div className="inventory-section">
                         {/* Inventar simplificat */}
-                        {server.inventory?.osInfo && (
-                            <div className="inventory-card">
-                                <div className="inventory-card-header">
-                                    <h3>Informatii Sistem</h3>
+                        <div className="inventory-dashboard">
+                            {/* Informatii Sistem */}
+                            {server.inventory?.osInfo && (
+                                <div className="inventory-card">
+                                    <div className="inventory-card-header">
+                                        <h3><span className="material-symbols-outlined">computer</span> Informatii Sistem</h3>
+                                    </div>
+                                    <div className="inventory-card-body">
+                                        <table className="inventory-table">
+                                            <tbody>
+                                                <tr><td>Distro</td><td>{server.inventory.osInfo.platform}</td></tr>
+                                                <tr><td>Version</td><td>{server.inventory.osInfo.platformVersion}</td></tr>
+                                                <tr><td>Kernel</td><td>{server.inventory.osInfo.kernelVersion}</td></tr>
+                                                <tr><td>Machine</td><td>{server.inventory.osInfo.kernelArch}</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                                <div className="inventory-card-body">
-                                    <table>
-                                        <tbody>
-                                            <tr><td>Distro</td><td>{server.inventory.osInfo.platform}</td></tr>
-                                            <tr><td>Version</td><td>{server.inventory.osInfo.platformVersion}</td></tr>
-                                            <tr><td>Kernel</td><td>{server.inventory.osInfo.kernelVersion}</td></tr>
-                                        </tbody>
-                                    </table>
+                            )}
+
+                            {/* Users */}
+                            {server.inventory?.users && server.inventory.users.length > 0 && (
+                                <div className="inventory-card">
+                                    <div className="inventory-card-header">
+                                        <h3><span className="material-symbols-outlined">group</span> Utilizatori ({server.inventory.users.length})</h3>
+                                    </div>
+                                    <div className="inventory-card-body scrollable-list">
+                                        <div className="tag-cloud">
+                                            {server.inventory.users.map((user, idx) => (
+                                                <span key={idx} className="badge badge-neutral">{user}</span>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+
+                            {/* Ports */}
+                            {server.inventory?.ports && server.inventory.ports.length > 0 && (
+                                <div className="inventory-card">
+                                    <div className="inventory-card-header">
+                                        <h3><span className="material-symbols-outlined">wifi</span> Porturi Deschise ({server.inventory.ports.length})</h3>
+                                    </div>
+                                    <div className="inventory-card-body scrollable-list">
+                                        <table className="inventory-table compact">
+                                            <thead>
+                                                <tr><th>Port</th><th>Adresa</th><th>Tip</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                {server.inventory.ports.map((port, idx) => (
+                                                    <tr key={idx}>
+                                                        <td><strong>{port.port}</strong></td>
+                                                        <td>{port.address || '*'}</td>
+                                                        <td>{port.type?.toUpperCase()}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Services */}
+                            {server.inventory?.services && server.inventory.services.length > 0 && (
+                                <div className="inventory-card">
+                                    <div className="inventory-card-header">
+                                        <h3><span className="material-symbols-outlined">settings_applications</span> Servicii Active ({server.inventory.services.length})</h3>
+                                    </div>
+                                    <div className="inventory-card-body scrollable-list">
+                                        <div className="tag-cloud">
+                                            {server.inventory.services.map((svc, idx) => (
+                                                <span key={idx} className="badge badge-success" style={{ margin: '2px' }}>{svc}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Packages */}
+                            {server.inventory?.packages && server.inventory.packages.length > 0 && (
+                                <div className="inventory-card full-width">
+                                    <div className="inventory-card-header">
+                                        <h3><span className="material-symbols-outlined">inventory_2</span> Pachete Instalate ({server.inventory.packages.length})</h3>
+                                    </div>
+                                    <div className="inventory-card-body scrollable-list" style={{ maxHeight: '300px' }}>
+                                        <div className="tag-cloud">
+                                            {server.inventory.packages.map((pkg, idx) => (
+                                                <span key={idx} className="badge badge-neutral" style={{ margin: '2px', fontSize: '0.75rem' }}>{pkg}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         {!server.inventory?.osInfo && (
                             <div className="empty-state">
                                 <p>Date de inventar indisponibile.</p>

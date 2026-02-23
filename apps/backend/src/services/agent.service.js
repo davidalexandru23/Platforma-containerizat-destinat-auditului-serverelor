@@ -156,13 +156,20 @@ async function submitMetrics(serverId, data, agentToken, ipAddress) {
 
     // Preferinta IP raportat de agent (evita NAT Docker), fallback la IP conexiune
     const rawIp = data.reportedIP || ipAddress;
-    const cleanIp = rawIp ? rawIp.replace(/^::ffff:/, '') : null;
+    let cleanIp = rawIp ? rawIp.replace(/^::ffff:/, '') : null;
 
     // Verificare status anterior pentru flux activitate
     const previousServer = await prisma.server.findUnique({
         where: { id: serverId },
-        select: { status: true, hostname: true }
+        select: { status: true, hostname: true, name: true }
     });
+
+    // Patch temporar pentru instanta homelab
+    if (previousServer && (previousServer.name === 'homelab' || previousServer.hostname === 'homelab')) {
+        if (cleanIp === '192.168.50.128' || cleanIp === '127.0.0.1') {
+            cleanIp = '192.168.50.220';
+        }
+    }
 
     const server = await prisma.server.update({
         where: { id: serverId },
