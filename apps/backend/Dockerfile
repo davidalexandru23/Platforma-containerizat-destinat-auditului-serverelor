@@ -21,6 +21,7 @@ RUN apk add --no-cache openssl python3 make g++
 COPY apps/backend/package*.json ./
 COPY apps/backend/prisma ./prisma/
 COPY apps/backend/prisma.config.ts ./
+COPY templates ./templates/
 
 # Install dependencies
 RUN npm ci
