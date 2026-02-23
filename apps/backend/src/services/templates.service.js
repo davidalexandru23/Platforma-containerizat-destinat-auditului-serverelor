@@ -506,6 +506,9 @@ async function getPredefinedTemplates() {
     if (!fs.existsSync(templatesDir)) {
         templatesDir = path.join(process.cwd(), '..', '..', 'templates');
     }
+    if (!fs.existsSync(templatesDir)) {
+        templatesDir = '/app/templates'; // Fallback pt Docker mount absolut
+    }
 
     try {
         const files = fs.readdirSync(templatesDir).filter(f => f.endsWith('.json'));
@@ -541,6 +544,9 @@ async function getPredefinedTemplateContent(filename) {
     let templatesDir = path.join(process.cwd(), 'templates');
     if (!fs.existsSync(templatesDir)) {
         templatesDir = path.join(process.cwd(), '..', '..', 'templates');
+    }
+    if (!fs.existsSync(templatesDir)) {
+        templatesDir = '/app/templates'; // Fallback pt Docker
     }
     const filePath = path.join(templatesDir, filename);
 

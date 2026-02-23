@@ -423,7 +423,7 @@ async function cleanupStaleAudits() {
             status: 'RUNNING',
             OR: [
                 { startedAt: { lt: timeoutThreshold } }, // Rulat de prea mult timp
-                { server: { lastSeen: { lt: offlineThreshold } } } // Server offline
+                { server: { agentIdentity: { lastSeen: { lt: offlineThreshold } } } } // Server offline
             ]
         },
         include: { server: true }
