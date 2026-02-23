@@ -63,7 +63,7 @@ async function register(data) {
 }
 
 async function login(data) {
-    const { email, password } = data;
+    const { email, password, rememberMe } = data;
 
     // Cautare utilizator
     const user = await prisma.user.findUnique({
@@ -83,9 +83,9 @@ async function login(data) {
     }
 
     // Generare token-uri
-    const tokens = await generateTokens(user.id, user.email, user.role.name);
+    const tokens = await generateTokens(user.id, user.email, user.role.name, rememberMe);
 
-    log.info(`User login: ${email}`);
+    log.info(`User login: ${email} (RememberMe: ${!!rememberMe})`);
 
     return {
         user: {
@@ -154,7 +154,7 @@ async function logout(userId) {
     return { message: 'Logout reusit' };
 }
 
-async function generateTokens(userId, email, roleName) {
+async function generateTokens(userId, email, roleName, rememberMe = false) {
     const payload = { sub: userId, email, role: roleName };
 
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -162,7 +162,8 @@ async function generateTokens(userId, email, roleName) {
     });
 
     const refreshTokenValue = uuidv4();
-    const expiresAt = calculateExpiry(process.env.JWT_REFRESH_EXPIRY || '7d');
+    const expiryDuration = rememberMe ? '30d' : (process.env.JWT_REFRESH_EXPIRY || '7d');
+    const expiresAt = calculateExpiry(expiryDuration);
 
     await prisma.refreshToken.create({
         data: {

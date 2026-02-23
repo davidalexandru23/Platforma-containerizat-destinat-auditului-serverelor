@@ -342,7 +342,7 @@ async function submitCheckResults(serverId, auditRunId, data, agentToken) {
                 if (!verified) {
                     console.warn(`[SECURITY] Signature verification failed for check ${result.automatedCheckId} on server ${serverId}`);
                     status = 'ERROR';
-                    result.errorMessage = 'Semnatura invalida — rezultat neacceptat';
+                    result.errorMessage = 'Semnatura invalida - rezultat neacceptat';
                 }
             }
 

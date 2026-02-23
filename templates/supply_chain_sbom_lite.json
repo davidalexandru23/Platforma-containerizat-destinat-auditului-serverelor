@@ -78,7 +78,7 @@
                     "checkId": "SC-2.3",
                     "title": "APT signed-by keyrings (best practice)",
                     "command": "if [ -f /etc/apt/sources.list ] || [ -d /etc/apt/sources.list.d ]; then SIGNED=$(grep -RhoE 'signed-by=' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null | wc -l); echo \"SIGNED_BY_REFS=$SIGNED\"; if [ \"$SIGNED\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi; else echo 'APT=NOT_PRESENT'; echo 'CHECK=PASS'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -86,7 +86,7 @@
                     "checkId": "SC-2.4",
                     "title": "Keyrings directory exists",
                     "command": "if [ -d /etc/apt/keyrings ]; then echo 'KEYRINGS_DIR=EXISTS'; echo 'CHECK=PASS'; elif [ -d /etc/apt ]; then echo 'KEYRINGS_DIR=MISSING'; echo 'CHECK=WARN'; else echo 'APT=NOT_PRESENT'; echo 'CHECK=PASS'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -94,7 +94,7 @@
                     "checkId": "SC-2.5",
                     "title": "DNF/YUM GPGcheck activ",
                     "command": "if command -v dnf >/dev/null 2>&1; then GPGCHECK=$(grep -E '^gpgcheck' /etc/dnf/dnf.conf 2>/dev/null | cut -d= -f2); echo \"DNF_GPGCHECK=$GPGCHECK\"; if [ \"$GPGCHECK\" = '1' ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi; elif command -v yum >/dev/null 2>&1; then GPGCHECK=$(grep -E '^gpgcheck' /etc/yum.conf 2>/dev/null | cut -d= -f2); echo \"YUM_GPGCHECK=$GPGCHECK\"; if [ \"$GPGCHECK\" = '1' ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi; else echo 'DNF_YUM=NOT_PRESENT'; echo 'CHECK=PASS'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
@@ -137,7 +137,7 @@
                     "checkId": "SC-3.3",
                     "title": "Unattended upgrades config activ",
                     "command": "if [ -f /etc/apt/apt.conf.d/20auto-upgrades ]; then if grep -qE 'APT::Periodic::Unattended-Upgrade\\s+\"1\"' /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null; then echo 'AUTO_UPGRADE=ACTIVE'; echo 'CHECK=PASS'; else echo 'AUTO_UPGRADE=NOT_SET'; echo 'CHECK=FAIL'; fi; else echo 'AUTO_UPGRADE=MISSING'; echo 'CHECK=WARN'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -204,7 +204,7 @@
                     "checkId": "SC-4.5",
                     "title": "Imagini fara digest pinning",
                     "command": "if command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1; then UNPINNED=$(docker ps -q 2>/dev/null | while read -r id; do docker inspect --format '{{json .RepoDigests}}' \"$id\" 2>/dev/null; done | grep -c '\\[\\]'); echo \"UNPINNED_IMAGES=$UNPINNED\"; if [ \"$UNPINNED\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi; else echo 'DOCKER=NOT_AVAILABLE'; echo 'CHECK=PASS'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -212,7 +212,7 @@
                     "checkId": "SC-4.6",
                     "title": "Non-standard registries in use",
                     "command": "if command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1; then REGISTRIES=$(docker ps --format '{{.Image}}' 2>/dev/null | awk -F/ 'NF>1{print $1}' | grep -E '\\.' | sort -u); if [ -n \"$REGISTRIES\" ]; then echo \"CUSTOM_REGISTRIES=$REGISTRIES\"; echo 'CHECK=REVIEW'; else echo 'CUSTOM_REGISTRIES=NONE'; echo 'CHECK=PASS'; fi; else echo 'DOCKER=NOT_AVAILABLE'; echo 'CHECK=PASS'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
@@ -248,7 +248,7 @@
                     "checkId": "SC-5.1",
                     "title": "Git installed",
                     "command": "if command -v git >/dev/null 2>&1; then echo 'GIT=INSTALLED'; git --version 2>/dev/null; echo 'CHECK=PASS'; else echo 'GIT=MISSING'; echo 'CHECK=WARN'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -256,7 +256,7 @@
                     "checkId": "SC-5.2",
                     "title": "Git checkouts on server",
                     "command": "GIT_DIRS=$(find / -maxdepth 4 -type d -name .git 2>/dev/null | wc -l); echo \"GIT_CHECKOUTS=$GIT_DIRS\"; if [ \"$GIT_DIRS\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; find / -maxdepth 4 -type d -name .git 2>/dev/null | head -n 10; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -264,7 +264,7 @@
                     "checkId": "SC-5.3",
                     "title": "Exposed private keys",
                     "command": "KEYS=$(find /etc /home /root -maxdepth 4 -type f \\( -name 'id_rsa' -o -name '*_key' \\) 2>/dev/null | wc -l); echo \"EXPOSED_PRIVATE_KEYS=$KEYS\"; if [ \"$KEYS\" -eq 0 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; find /etc /home /root -maxdepth 4 -type f \\( -name 'id_rsa' -o -name '*_key' \\) 2>/dev/null | head -n 10; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }

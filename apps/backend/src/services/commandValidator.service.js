@@ -3,7 +3,7 @@
 
 import { log } from '../lib/logger.js';
 
-// Nivel 1: Blacklist — comenzi blocate definitiv, nimeni nu le poate aproba
+// Nivel 1: Blacklist - comenzi blocate definitiv, nimeni nu le poate aproba
 const DANGEROUS_COMMANDS = [
     // Stergere fisiere/directoare
     { pattern: /\brm\s+(-[a-zA-Z]*\s+)*/, label: 'rm (stergere fisiere)' },
@@ -39,7 +39,7 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\bchown\b/, label: 'chown (modificare proprietar)' },
     { pattern: /\bchgrp\b/, label: 'chgrp (modificare grup)' },
 
-    // Gestiune pachete — install/remove/purge
+    // Gestiune pachete - install/remove/purge
     { pattern: /\bapt\s+(install|remove|purge|autoremove)\b/, label: 'apt install/remove' },
     { pattern: /\bapt-get\s+(install|remove|purge|autoremove)\b/, label: 'apt-get install/remove' },
     { pattern: /\byum\s+(install|remove|erase|update)\b/, label: 'yum install/remove' },
@@ -56,7 +56,7 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\beval\s+/, label: 'eval (executie cod dinamic)' },
     { pattern: /\bexec\s+/, label: 'exec (inlocuire proces)' },
 
-    // Servicii — start/stop/restart/enable/disable
+    // Servicii - start/stop/restart/enable/disable
     { pattern: /\bsystemctl\s+(start|stop|restart|enable|disable|mask)\b/, label: 'systemctl modificare serviciu' },
     { pattern: /\bservice\s+\S+\s+(start|stop|restart)\b/, label: 'service start/stop/restart' },
 
@@ -74,7 +74,7 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\bcrontab\s+-(e|r)\b/, label: 'crontab -e/-r (modificare cron)' },
 ];
 
-// Nivel 2: Operatori periculosi — detectie comportament suspect
+// Nivel 2: Operatori periculosi - detectie comportament suspect
 const DANGEROUS_OPERATORS = [
     { pattern: /(?<![2&])\s>\s*(?!\/dev\/null)(?![0-9])\S/, reason: 'Redirectare output catre fisier' },
     { pattern: />>/, reason: 'Append catre fisier' },
@@ -100,10 +100,10 @@ export function validateCommand(command) {
 
     const cmd = command.trim();
 
-    // Nivel 1: Blacklist — blocare definitiva
+    // Nivel 1: Blacklist - blocare definitiva
     for (const { pattern, label } of DANGEROUS_COMMANDS) {
         if (pattern.test(cmd)) {
-            log.warn(`[COMMAND_VALIDATOR] Comanda BLOCATA: "${cmd}" — motiv: ${label}`);
+            log.warn(`[COMMAND_VALIDATOR] Comanda BLOCATA: "${cmd}" - motiv: ${label}`);
             return {
                 allowed: false,
                 severity: 'BLOCKED',
@@ -121,7 +121,7 @@ export function validateCommand(command) {
     }
 
     if (reasons.length > 0) {
-        log.warn(`[COMMAND_VALIDATOR] Comanda RESPINSA: "${cmd}" — motive: ${reasons.join(', ')}`);
+        log.warn(`[COMMAND_VALIDATOR] Comanda RESPINSA: "${cmd}" - motive: ${reasons.join(', ')}`);
         return {
             allowed: false,
             severity: 'REJECTED',

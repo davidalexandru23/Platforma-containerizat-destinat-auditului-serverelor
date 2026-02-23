@@ -98,7 +98,7 @@ async function update(id, data) {
         throw new NotFoundError('Server nu exista');
     }
 
-    // Whitelist campuri permise — previne mass-assignment
+    // Whitelist campuri permise - previne mass-assignment
     const { name, hostname, ipAddress, description } = data;
 
     return prisma.server.update({

@@ -23,8 +23,8 @@ export function AuthProvider({ children }) {
         setLoading(false);
     }, []);
 
-    const login = async (email, password) => {
-        const response = await authApi.login({ email, password });
+    const login = async (email, password, rememberMe = false) => {
+        const response = await authApi.login({ email, password, rememberMe });
         localStorage.setItem('accessToken', response.accessToken);
         localStorage.setItem('refreshToken', response.refreshToken);
         localStorage.setItem('user', JSON.stringify(response.user));

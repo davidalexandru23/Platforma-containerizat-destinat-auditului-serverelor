@@ -19,7 +19,7 @@ function Login() {
         setError('');
 
         try {
-            await login(email, password);
+            await login(email, password, rememberMe);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Credentiale invalide');

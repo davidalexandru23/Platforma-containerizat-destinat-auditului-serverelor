@@ -1,7 +1,7 @@
 // Validare comenzi client-side (feedback instant)
-// Copie simplificata a regulilor din backend — validarea reala ramane server-side
+// Copie simplificata a regulilor din backend - validarea reala ramane server-side
 
-// Nivel 1: Blacklist — comenzi blocate definitiv
+// Nivel 1: Blacklist - comenzi blocate definitiv
 const DANGEROUS_COMMANDS = [
     { pattern: /\brm\s+(-[a-zA-Z]*\s+)*/, label: 'rm (stergere fisiere)' },
     { pattern: /\brmdir\b/, label: 'rmdir (stergere directoare)' },

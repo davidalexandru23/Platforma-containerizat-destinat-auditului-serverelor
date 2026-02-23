@@ -134,7 +134,7 @@
                     "checkId": "AC-7.b",
                     "title": "Fail2Ban status",
                     "command": "if command -v fail2ban-client >/dev/null 2>&1; then echo 'FAIL2BAN=ACTIVE'; fail2ban-client status 2>/dev/null | head -n 5; echo 'CHECK=PASS'; else echo 'FAIL2BAN=NOT_INSTALLED'; echo 'CHECK=WARN'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
@@ -186,7 +186,7 @@
                     "checkId": "IA-2.b",
                     "title": "MFA modules presence",
                     "command": "FOUND=''; ls /lib*/security/*google_authenticator* 2>/dev/null && FOUND=\"$FOUND google-auth\"; ls /lib*/security/*oath* 2>/dev/null && FOUND=\"$FOUND oath\"; ls /lib*/security/*yubico* 2>/dev/null && FOUND=\"$FOUND yubico\"; ls /lib*/security/*pam_u2f* 2>/dev/null && FOUND=\"$FOUND u2f\"; if [ -n \"$FOUND\" ]; then echo \"MFA_MODULES=$FOUND\"; echo 'CHECK=PASS'; else echo 'MFA_MODULES=NONE'; echo 'CHECK=INFO'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
@@ -248,7 +248,7 @@
                     "checkId": "AU-2.b",
                     "title": "Auditd activ",
                     "command": "if systemctl is-active auditd >/dev/null 2>&1; then echo 'AUDITD=ACTIVE'; RULES=$(auditctl -l 2>/dev/null | wc -l); echo \"AUDIT_RULES=$RULES\"; echo 'CHECK=PASS'; else echo 'AUDITD=INACTIVE'; echo 'CHECK=WARN'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
@@ -276,7 +276,7 @@
                     "checkId": "AU-6.a",
                     "title": "Auth failures recente",
                     "command": "FAILURES=$(journalctl --no-pager -n 500 2>/dev/null | grep -ciE 'failed password|authentication failure'); echo \"AUTH_FAILURES_RECENT=$FAILURES\"; if [ \"$FAILURES\" -le 50 ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -374,7 +374,7 @@
                     "checkId": "CM-7.b",
                     "title": "Running services count",
                     "command": "if command -v systemctl >/dev/null 2>&1; then COUNT=$(systemctl list-units --type=service --state=running --no-pager | grep -c 'running'); echo \"RUNNING_SERVICES=$COUNT\"; if [ \"$COUNT\" -le 50 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi; else echo 'SYSTEMCTL=NOT_AVAILABLE'; echo 'CHECK=WARN'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
@@ -426,7 +426,7 @@
                     "checkId": "SC-7.a",
                     "title": "Listening ports count",
                     "command": "COUNT=$(ss -lntup 2>/dev/null | grep -c LISTEN); echo \"LISTENING_PORTS=$COUNT\"; ss -lntup 2>/dev/null | head -n 30; if [ \"$COUNT\" -le 20 ]; then echo 'CHECK=PASS'; else echo 'CHECK=REVIEW'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -508,7 +508,7 @@
                     "checkId": "SI-3.a",
                     "title": "Antimalware presence",
                     "command": "FOUND=''; systemctl is-active clamav-freshclam >/dev/null 2>&1 && FOUND=\"$FOUND clamav\"; command -v clamscan >/dev/null 2>&1 && FOUND=\"$FOUND clamscan\"; command -v rkhunter >/dev/null 2>&1 && FOUND=\"$FOUND rkhunter\"; if [ -n \"$FOUND\" ]; then echo \"ANTIMALWARE=$FOUND\"; echo 'CHECK=PASS'; else echo 'ANTIMALWARE=NONE'; echo 'CHECK=FAIL'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 },
@@ -516,7 +516,7 @@
                     "checkId": "SI-3.b",
                     "title": "EDR agent presence",
                     "command": "FOUND=''; for p in falcon-sensor osqueryd elastic-agent wazuh-agent; do pgrep -x \"$p\" >/dev/null 2>&1 && FOUND=\"$FOUND $p\"; done; if [ -n \"$FOUND\" ]; then echo \"EDR_AGENTS=$FOUND\"; echo 'CHECK=PASS'; else echo 'EDR_AGENTS=NONE'; echo 'CHECK=INFO'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }
@@ -596,7 +596,7 @@
                     "checkId": "CP-9.b",
                     "title": "Cron backup jobs",
                     "command": "JOBS=$(grep -rlE 'backup|restic|borg|rclone|rsync' /etc/cron.* /etc/crontab 2>/dev/null | wc -l); echo \"BACKUP_CRON_JOBS=$JOBS\"; if [ \"$JOBS\" -gt 0 ]; then echo 'CHECK=PASS'; grep -rE 'backup|restic|borg|rclone|rsync' /etc/cron.* /etc/crontab 2>/dev/null | head -n 10; else echo 'CHECK=WARN'; fi",
-                    "expectedResult": "CHECK=",
+                    "expectedResult": "CHECK=PASS",
                     "comparison": "CONTAINS",
                     "checkType": "COMMAND"
                 }

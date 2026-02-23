@@ -166,7 +166,7 @@ func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck)
 		cmdToCheck = check.Script
 	}
 	if safe, reason := isCommandSafe(cmdToCheck); !safe {
-		log.Printf("[SECURITY] Comanda BLOCATA pe agent: %s — motiv: %s", cmdToCheck, reason)
+		log.Printf("[SECURITY] Comanda BLOCATA pe agent: %s - motiv: %s", cmdToCheck, reason)
 		return "", -1, fmt.Errorf("comanda blocata de agent: %s", reason)
 	}
 
@@ -192,7 +192,7 @@ func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck)
 	return string(output), exitCode, err
 }
 
-// Blacklist minimal pe agent — ultima linie de aparare
+// Blacklist minimal pe agent - ultima linie de aparare
 var dangerousPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\brm\s+(-[a-zA-Z]*[rf][a-zA-Z]*\s+)*\/`),
 	regexp.MustCompile(`\bdd\s+`),

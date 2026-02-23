@@ -715,11 +715,11 @@ function ImportTemplateModal({ predefinedTemplates, onClose, onSuccess }) {
             if (err instanceof SyntaxError) {
                 setError('JSON invalid');
             } else {
-                // Erori validare comenzi — afisare detaliata
+                // Erori validare comenzi - afisare detaliata
                 const cmdErrors = err.response?.data?.commandErrors;
                 if (cmdErrors && cmdErrors.length > 0) {
                     const details = cmdErrors.map(e =>
-                        `[${e.controlId}/${e.checkId}] ${e.command} — ${e.reasons.join(', ')}`
+                        `[${e.controlId}/${e.checkId}] ${e.command} - ${e.reasons.join(', ')}`
                     ).join('\n');
                     setError(`Comenzi interzise detectate:\n${details}`);
                 } else {
@@ -1226,11 +1226,11 @@ function EditTemplateModal({ template, controls, onClose, onSuccess, predefinedT
             await api.put(`/templates/${template.id}/controls`, { controls: controlsToSave });
             onSuccess();
         } catch (err) {
-            // Erori validare comenzi — afisare detaliata
+            // Erori validare comenzi - afisare detaliata
             const cmdErrors = err.response?.data?.commandErrors;
             if (cmdErrors && cmdErrors.length > 0) {
                 const details = cmdErrors.map(e =>
-                    `[${e.controlId}/${e.checkId}] ${e.command} — ${e.reasons.join(', ')}`
+                    `[${e.controlId}/${e.checkId}] ${e.command} - ${e.reasons.join(', ')}`
                 ).join('\n');
                 setError(`Comenzi interzise detectate:\n${details}`);
             } else {

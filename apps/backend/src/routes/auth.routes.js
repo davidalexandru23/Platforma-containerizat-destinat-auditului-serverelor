@@ -70,6 +70,7 @@ router.post('/login',
     [
         body('email').trim().isEmail().withMessage('Email invalid'),
         body('password').notEmpty().withMessage('Parola obligatorie'),
+        body('rememberMe').optional().isBoolean(),
     ],
     async (req, res, next) => {
         try {
