@@ -192,7 +192,7 @@ func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck)
 	return string(output), exitCode, err
 }
 
-// Blacklist minimal pe agent - ultima linie de aparare
+// Blacklist minimal pe agent
 var dangerousPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\brm\s+(-[a-zA-Z]*[rf][a-zA-Z]*\s+)*\/`),
 	regexp.MustCompile(`\bdd\s+`),

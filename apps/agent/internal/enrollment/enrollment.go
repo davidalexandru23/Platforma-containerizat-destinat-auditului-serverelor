@@ -149,9 +149,7 @@ func Enroll(serverURL, token, configPath, version string) error {
 	}
 
 	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════════╗")
-	fmt.Println("║        BitTrail Agent inrolat cu succes!         ║")
-	fmt.Println("╚══════════════════════════════════════════════════╝")
+	fmt.Println("       BitTrail Agent inrolat cu succes!         ")
 	fmt.Println()
 	fmt.Printf("  Server:      %s\n", result.ServerName)
 	fmt.Printf("  Server ID:   %s\n", result.ServerID)

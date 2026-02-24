@@ -83,7 +83,7 @@ Actiuni agent:
 - Actualizare inventar la fiecare ora
 - Verificare si executare controale audit in asteptare
 
-Pentru productie, utilizare serviciu systemd:
+Pentru prod, utilizare serviciu systemd:
   sudo systemctl enable bittrail-agent
   sudo systemctl start bittrail-agent`,
 		RunE: func(cmd *cobra.Command, args []string) error {
