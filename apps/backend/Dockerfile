@@ -45,5 +45,6 @@ RUN mkdir -p uploads/evidence
 
 ENV NODE_ENV=production
 EXPOSE 3000
+EXPOSE 11162/udp
 
 CMD ["/bin/sh", "-c", "npx prisma db push --config=prisma.config.ts && npm start"]

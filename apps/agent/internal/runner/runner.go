@@ -44,6 +44,21 @@ func Run(configPath string) error {
 	inventoryCollector := collector.NewInventoryCollector()
 	auditRunner := collector.NewAuditRunner(client, cfg.KeyFile, cfg.BackendKeyFile)
 
+	// --- Initializare SNMP Sender (optional) ---
+	var snmpSender *collector.SNMPSender
+	if cfg.SNMPEnabled && cfg.SNMPTarget != "" {
+		snmpSender = collector.NewSNMPSender(
+			cfg.SNMPTarget,
+			cfg.SNMPPort,
+			cfg.SNMPCommunity,
+			cfg.ServerID,
+		)
+		log.Printf("SNMP Trap activat: %s:%d (community: %s, interval: %ds)",
+			cfg.SNMPTarget, cfg.SNMPPort, cfg.SNMPCommunity, cfg.SNMPInterval)
+	} else {
+		log.Println("SNMP Trap dezactivat. Metrici doar prin HTTP POST.")
+	}
+
 	// Canal oprire (graceful shutdown)
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
@@ -57,6 +72,13 @@ func Run(configPath string) error {
 	defer inventoryTicker.Stop()
 	defer auditTicker.Stop()
 
+	// Ticker SNMP separat (interval mai scurt, live)
+	var snmpTicker *time.Ticker
+	if snmpSender != nil {
+		snmpTicker = time.NewTicker(time.Duration(cfg.SNMPInterval) * time.Second)
+		defer snmpTicker.Stop()
+	}
+
 	// Colectare initiala
 	go func() {
 		log.Println("Collecting initial inventory...")
@@ -69,9 +91,16 @@ func Run(configPath string) error {
 
 	log.Printf("Agent started. Server: %s (ID: %s)", cfg.ServerURL, cfg.ServerID)
 
+	// Canal SNMP (nil-safe — select ignora nil channels)
+	var snmpChan <-chan time.Time
+	if snmpTicker != nil {
+		snmpChan = snmpTicker.C
+	}
+
 	for {
 		select {
 		case <-metricsTicker.C:
+			// HTTP POST - persistare metrici in baza de date
 			metrics, err := metricsCollector.Collect()
 			if err != nil {
 				log.Printf("Error collecting metrics: %v", err)
@@ -80,6 +109,24 @@ func Run(configPath string) error {
 			if err := client.SendMetrics(metrics); err != nil {
 				log.Printf("Error sending metrics: %v", err)
 			}
+
+		case <-snmpChan:
+			// SNMP Trap UDP - trimitere live (fire-and-forget)
+			metrics, err := metricsCollector.Collect()
+			if err != nil {
+				log.Printf("Error collecting metrics for SNMP: %v", err)
+				continue
+			}
+			detailed, err := metricsCollector.CollectDetailed()
+			if err != nil {
+				log.Printf("Error collecting detailed metrics: %v", err)
+				continue
+			}
+			go func() {
+				if err := snmpSender.SendMetricsTrap(metrics, detailed); err != nil {
+					log.Printf("Error sending SNMP trap: %v", err)
+				}
+			}()
 
 		case <-inventoryTicker.C:
 			inv, err := inventoryCollector.Collect()

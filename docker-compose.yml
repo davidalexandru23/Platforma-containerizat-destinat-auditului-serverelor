@@ -33,8 +33,12 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bittrail?schema=public
       BACKEND_PORT: 3000
       CORS_ORIGIN: http://localhost:5173
+      SNMP_ENABLED: "true"
+      SNMP_TRAP_PORT: 11162
+      SNMP_COMMUNITY: bittrail
     ports:
       - "3000:3000"
+      - "11162:11162/udp"  # SNMP Trap UDP (expus direct, NU prin Cloudflare tunnel)
     depends_on:
       postgres:
         condition: service_healthy

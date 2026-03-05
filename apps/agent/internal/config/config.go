@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -26,6 +27,13 @@ type Config struct {
 	AgentCertPath  string `yaml:"agent_cert_path"`
 	CACertPath     string `yaml:"ca_cert_path"`
 	BackendPubPath string `yaml:"backend_pub_path"`
+
+	// Configurare SNMP Trap
+	SNMPEnabled   bool   `yaml:"snmp_enabled"`   // Activare trimitere trap-uri SNMP
+	SNMPTarget    string `yaml:"snmp_target"`    // Host backend (IP direct, NU prin tunnel)
+	SNMPPort      int    `yaml:"snmp_port"`      // Port UDP trap (implicit 11162)
+	SNMPCommunity string `yaml:"snmp_community"` // Community string
+	SNMPInterval  int    `yaml:"snmp_interval"`  // Interval trimitere trap-uri (secunde)
 }
 
 func Load(path string) (*Config, error) {
@@ -41,13 +49,30 @@ func Load(path string) (*Config, error) {
 
 	// Valori implicite
 	if cfg.MetricsInterval == 0 {
-		cfg.MetricsInterval = 10
+		cfg.MetricsInterval = 60 // Persistare DB la 60s (mai rar, SNMP preia live)
 	}
 	if cfg.InventoryInterval == 0 {
 		cfg.InventoryInterval = 3600 // 1 ora
 	}
 	if cfg.AuditCheckInterval == 0 {
 		cfg.AuditCheckInterval = 5
+	}
+
+	// Valori implicite SNMP
+	if cfg.SNMPPort == 0 {
+		cfg.SNMPPort = 11162 // Port non-privilegiat
+	}
+	if cfg.SNMPCommunity == "" {
+		cfg.SNMPCommunity = "bittrail"
+	}
+	if cfg.SNMPInterval == 0 {
+		cfg.SNMPInterval = 5 // Trap la fiecare 5 secunde (live)
+	}
+	// Daca SNMP target nu e setat, extragere host din server_url
+	if cfg.SNMPTarget == "" && cfg.ServerURL != "" {
+		if u, err := url.Parse(cfg.ServerURL); err == nil {
+			cfg.SNMPTarget = u.Hostname()
+		}
 	}
 
 	// Valori implicite securitate

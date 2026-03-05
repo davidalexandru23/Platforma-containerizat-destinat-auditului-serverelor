@@ -2,10 +2,12 @@ package collector
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -15,6 +17,33 @@ import (
 	psnet "github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
 )
+
+// DiskInfo - informatii per partitie disc
+type DiskInfo struct {
+	MountPoint string `json:"mountPoint"`
+	FsType     string `json:"fsType"`
+	UsedBytes  uint64 `json:"usedBytes"`
+	TotalBytes uint64 `json:"totalBytes"`
+}
+
+// NetInterfaceInfo - informatii per interfata retea
+type NetInterfaceInfo struct {
+	Name       string `json:"name"`
+	BytesRecv  uint64 `json:"bytesRecv"`
+	BytesSent  uint64 `json:"bytesSent"`
+	PacketsIn  uint64 `json:"packetsIn"`
+	PacketsOut uint64 `json:"packetsOut"`
+	Errors     uint64 `json:"errors"`
+}
+
+// ProcessInfo - informatii detaliate per proces
+type ProcessInfo struct {
+	PID     int32   `json:"pid"`
+	Name    string  `json:"name"`
+	CPU     float64 `json:"cpu"`
+	MemMB   float64 `json:"memMB"`
+	Command string  `json:"command"`
+}
 
 type MetricsCollector struct{}
 
@@ -112,6 +141,126 @@ func (mc *MetricsCollector) Collect() (*Metrics, error) {
 	}
 
 	return m, nil
+}
+
+// CollectDetailed - colectare metrici extinse (per-core, per-disk, per-interfata, swap, procese)
+func (mc *MetricsCollector) CollectDetailed() (*DetailedMetrics, error) {
+	d := &DetailedMetrics{}
+
+	// CPU per-core (interval scurt pentru metrici recente)
+	perCore, err := cpu.Percent(200*time.Millisecond, true)
+	if err == nil {
+		d.CpuPerCore = perCore
+		d.CpuCount = len(perCore)
+	}
+
+	// Memorie detaliata (available, cached, buffers)
+	memInfo, err := mem.VirtualMemory()
+	if err == nil {
+		d.MemAvailableBytes = memInfo.Available
+		d.MemCachedBytes = memInfo.Cached
+		d.MemBuffersBytes = memInfo.Buffers
+	}
+
+	// Swap
+	swapInfo, err := mem.SwapMemory()
+	if err == nil {
+		d.SwapUsedBytes = swapInfo.Used
+		d.SwapTotalBytes = swapInfo.Total
+	}
+
+	// Disc - toate partitiile montate
+	partitions, err := disk.Partitions(false)
+	if err == nil {
+		for _, p := range partitions {
+			usage, err := disk.Usage(p.Mountpoint)
+			if err == nil && usage.Total > 0 {
+				d.Disks = append(d.Disks, DiskInfo{
+					MountPoint: p.Mountpoint,
+					FsType:     p.Fstype,
+					UsedBytes:  usage.Used,
+					TotalBytes: usage.Total,
+				})
+			}
+		}
+	}
+
+	// Retea - per interfata
+	netStats, err := psnet.IOCounters(true) // true = per interfata
+	if err == nil {
+		for _, iface := range netStats {
+			// Excludere loopback si interfete virtuale
+			if iface.Name == "lo" || strings.HasPrefix(iface.Name, "veth") {
+				continue
+			}
+			d.NetInterfaces = append(d.NetInterfaces, NetInterfaceInfo{
+				Name:       iface.Name,
+				BytesRecv:  iface.BytesRecv,
+				BytesSent:  iface.BytesSent,
+				PacketsIn:  iface.PacketsRecv,
+				PacketsOut: iface.PacketsSent,
+				Errors:     iface.Errin + iface.Errout,
+			})
+		}
+	}
+
+	// Top procese detaliate (10)
+	procs, err := process.Processes()
+	if err == nil {
+		type procDetail struct {
+			pid  int32
+			name string
+			cpu  float64
+			mem  float64
+			cmd  string
+		}
+		var details []procDetail
+
+		for _, p := range procs {
+			name, _ := p.Name()
+			cpuPct, _ := p.CPUPercent()
+			memInfo, _ := p.MemoryInfo()
+
+			var memMB float64
+			if memInfo != nil {
+				memMB = float64(memInfo.RSS) / 1024 / 1024
+			}
+
+			cmdLine, _ := p.Cmdline()
+			if cmdLine == "" {
+				cmdLine = name
+			}
+			// Limitare lungime comanda
+			if len(cmdLine) > 100 {
+				cmdLine = cmdLine[:100] + "..."
+			}
+
+			if name != "" {
+				details = append(details, procDetail{p.Pid, name, cpuPct, memMB, cmdLine})
+			}
+		}
+
+		// Sortare dupa CPU (top 10)
+		for i := 0; i < len(details) && i < 10; i++ {
+			for j := i + 1; j < len(details); j++ {
+				if details[j].cpu > details[i].cpu {
+					details[i], details[j] = details[j], details[i]
+				}
+			}
+		}
+
+		for i := 0; i < len(details) && i < 10; i++ {
+			d.TopProcessesDetailed = append(d.TopProcessesDetailed, ProcessInfo{
+				PID:     details[i].pid,
+				Name:    details[i].name,
+				CPU:     details[i].cpu,
+				MemMB:   details[i].mem,
+				Command: fmt.Sprintf("%s", details[i].cmd),
+			})
+		}
+	}
+
+	return d, nil
 }
 
 func getLocalIP() string {

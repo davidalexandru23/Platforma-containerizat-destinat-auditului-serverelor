@@ -22,6 +22,7 @@ import agentRoutes from './routes/agent.routes.js';
 import templatesRoutes from './routes/templates.routes.js';
 import auditRoutes from './routes/audit.routes.js';
 import { setupWebSocket, io as wsIO } from './websocket.js';
+import { startSNMPListener } from './services/snmpListener.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { prisma } from './lib/prisma.js';
 import { log, requestLogger } from './lib/logger.js';
@@ -99,6 +100,13 @@ app.use(errorHandler);
 
 // Initializare WebSocket
 setupWebSocket(io);
+
+// Initializare SNMP Trap Listener (optional, activat din .env)
+if (process.env.SNMP_ENABLED === 'true') {
+    startSNMPListener(io);
+} else {
+    log.info('SNMP Trap listener dezactivat (SNMP_ENABLED!=true)');
+}
 
 // Exportare pentru alte module
 export { io };

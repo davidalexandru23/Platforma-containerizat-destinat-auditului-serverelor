@@ -25,6 +25,10 @@ function ServerDetail() {
     // Stare versiune agent
     const [latestAgentVersion, setLatestAgentVersion] = useState(null);
 
+    // Stare metrici detaliate live (SNMP)
+    const [detailedMetrics, setDetailedMetrics] = useState(null);
+    const [lastMetricsUpdate, setLastMetricsUpdate] = useState(null);
+
     useEffect(() => {
         loadServer();
         loadAudits();
@@ -56,6 +60,13 @@ function ServerDetail() {
                     metrics: { ...(prev.metrics || {}), ...data }
                 };
             });
+            setLastMetricsUpdate(new Date());
+        });
+
+        // Metrici detaliate live (via SNMP trap)
+        liveSocket.on('server:metrics:detailed', (data) => {
+            setDetailedMetrics(data);
+            setLastMetricsUpdate(new Date());
         });
 
         liveSocket.on('server:heartbeat', (data) => {
@@ -441,102 +452,350 @@ bittrail-agent version`;
                             </div>
                         )}
 
-                        {/* Afisare metrici (daca e online) */}
+                        {/* Indicator live + timestamp ultima actualizare */}
                         {isActive && (
-                            <div className="metrics-grid">
-                                {/* Continut metrici */}
-                                <div className="metric-card">
-                                    <div className="metric-header">
-                                        <div>
-                                            <p className="metric-label">CPU Load</p>
-                                            <h3 className="metric-value">
-                                                {server.metrics?.cpuPercent?.toFixed(1) || '0'}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>%</span>
-                                            </h3>
-                                        </div>
-                                        <span className="metric-change positive">
-                                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>horizontal_rule</span>
-                                            Stabil
-                                        </span>
-                                    </div>
-                                    <div className="metric-chart">
-                                        <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
-                                            <div
-                                                className="progress-bar progress-bar-primary"
-                                                style={{ width: `${server.metrics?.cpuPercent || 0}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
+                            <div className="live-metrics-header">
+                                <div className="live-indicator">
+                                    <div className="live-pulse"></div>
+                                    <span>Metrici Live</span>
+                                    {detailedMetrics?.source === 'snmp' && (
+                                        <span className="badge badge-neutral" style={{ fontSize: '0.65rem', marginLeft: '0.5rem' }}>SNMP</span>
+                                    )}
                                 </div>
+                                {lastMetricsUpdate && (
+                                    <span className="last-update">
+                                        Ultima actualizare: {lastMetricsUpdate.toLocaleTimeString('ro-RO')}
+                                    </span>
+                                )}
+                            </div>
+                        )}
 
-                                <div className="metric-card">
-                                    <div className="metric-header">
-                                        <div>
-                                            <p className="metric-label">Memorie</p>
-                                            <h3 className="metric-value">
-                                                {((server.metrics?.memUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(1)}
-                                                <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>GB</span>
-                                            </h3>
-                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                din {((server.metrics?.memTotalBytes || 0) / 1024 / 1024 / 1024).toFixed(0)}GB
-                                            </p>
+                        {/* Dashboard metrici detaliate */}
+                        {isActive && (
+                            <>
+                                {/* Rand 1: CPU + Memorie + Load Average */}
+                                <div className="metrics-grid-detailed">
+                                    {/* CPU Section */}
+                                    <div className="metric-card-detailed">
+                                        <div className="metric-card-title">
+                                            <span className="material-symbols-outlined">memory</span>
+                                            CPU
                                         </div>
-                                    </div>
-                                    <div className="metric-chart">
-                                        <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
-                                            <div
-                                                className="progress-bar progress-bar-warning"
-                                                style={{ width: `${(Number(server.metrics?.memUsedBytes || 0) / Number(server.metrics?.memTotalBytes || 1)) * 100}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="metric-card">
-                                    <div className="metric-header">
-                                        <div>
-                                            <p className="metric-label">Disk I/O</p>
-                                            <h3 className="metric-value">
-                                                {((server.metrics?.diskUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(1)}<span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>GB</span>
-                                            </h3>
-                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                Used
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="metric-chart">
-                                        <div className="progress" style={{ height: '100%', borderRadius: '8px' }}>
-                                            <div
-                                                className="progress-bar progress-bar-primary"
-                                                style={{ width: `${(Number(server.metrics?.diskUsedBytes || 0) / Number(server.metrics?.diskTotalBytes || 1)) * 100}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="metric-card">
-                                    <div className="metric-header">
-                                        <div>
-                                            <p className="metric-label">Network</p>
-                                            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem' }}>
-                                                <div>
-                                                    <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>In</span>
-                                                    <p style={{ fontSize: '1.125rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                                                        {((server.metrics?.netInBytes || 0) / 1024 / 1024).toFixed(1)}
-                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mb</span>
-                                                    </p>
+                                        <div className="cpu-main">
+                                            <div className="cpu-gauge">
+                                                <svg viewBox="0 0 120 120" className="gauge-svg">
+                                                    <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" strokeWidth="8" />
+                                                    <circle cx="60" cy="60" r="54" fill="none" stroke="var(--primary)" strokeWidth="8"
+                                                        strokeDasharray={`${(server.metrics?.cpuPercent || server.metrics?.cpu || 0) / 100 * 339.3} 339.3`}
+                                                        strokeLinecap="round"
+                                                        transform="rotate(-90 60 60)"
+                                                        className="gauge-progress"
+                                                    />
+                                                    <text x="60" y="55" textAnchor="middle" className="gauge-text">
+                                                        {(server.metrics?.cpuPercent || server.metrics?.cpu || 0).toFixed(1)}%
+                                                    </text>
+                                                    <text x="60" y="72" textAnchor="middle" className="gauge-label">
+                                                        {detailedMetrics?.cpuCount || '-'} cores
+                                                    </text>
+                                                </svg>
+                                            </div>
+                                            {/* Per-core bars */}
+                                            {detailedMetrics?.cpuPerCore && detailedMetrics.cpuPerCore.length > 0 && (
+                                                <div className="cpu-cores">
+                                                    {detailedMetrics.cpuPerCore.map((core, idx) => (
+                                                        <div key={idx} className="core-bar-row">
+                                                            <span className="core-label">C{idx}</span>
+                                                            <div className="core-bar-track">
+                                                                <div className="core-bar-fill" style={{
+                                                                    width: `${core}%`,
+                                                                    backgroundColor: core > 90 ? 'var(--danger)' : core > 70 ? 'var(--warning)' : 'var(--primary)'
+                                                                }}></div>
+                                                            </div>
+                                                            <span className="core-value">{core.toFixed(0)}%</span>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                <div>
-                                                    <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Out</span>
-                                                    <p style={{ fontSize: '1.125rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                                                        {((server.metrics?.netOutBytes || 0) / 1024 / 1024).toFixed(1)}
-                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mb</span>
-                                                    </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Memorie Section */}
+                                    <div className="metric-card-detailed">
+                                        <div className="metric-card-title">
+                                            <span className="material-symbols-outlined">storage</span>
+                                            Memorie
+                                        </div>
+                                        <div className="mem-main">
+                                            <div className="mem-stats">
+                                                <div className="mem-stat-row">
+                                                    <span className="mem-stat-label">Folosita</span>
+                                                    <span className="mem-stat-value">
+                                                        {((server.metrics?.mem?.used || server.metrics?.memUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(2)} GB
+                                                    </span>
                                                 </div>
+                                                <div className="mem-stat-row">
+                                                    <span className="mem-stat-label">Total</span>
+                                                    <span className="mem-stat-value">
+                                                        {((server.metrics?.mem?.total || server.metrics?.memTotalBytes || 1) / 1024 / 1024 / 1024).toFixed(2)} GB
+                                                    </span>
+                                                </div>
+                                                {detailedMetrics?.mem && (
+                                                    <>
+                                                        <div className="mem-stat-row">
+                                                            <span className="mem-stat-label">Disponibila</span>
+                                                            <span className="mem-stat-value">{(detailedMetrics.mem.available / 1024 / 1024 / 1024).toFixed(2)} GB</span>
+                                                        </div>
+                                                        <div className="mem-stat-row">
+                                                            <span className="mem-stat-label">Cache</span>
+                                                            <span className="mem-stat-value">{(detailedMetrics.mem.cached / 1024 / 1024 / 1024).toFixed(2)} GB</span>
+                                                        </div>
+                                                        <div className="mem-stat-row">
+                                                            <span className="mem-stat-label">Buffers</span>
+                                                            <span className="mem-stat-value">{(detailedMetrics.mem.buffers / 1024 / 1024 / 1024).toFixed(2)} GB</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <div className="mem-bar-container">
+                                                <div className="mem-bar-label">RAM</div>
+                                                <div className="progress" style={{ height: '12px', borderRadius: '6px' }}>
+                                                    <div className="progress-bar progress-bar-warning" style={{
+                                                        width: `${(Number(server.metrics?.mem?.used || server.metrics?.memUsedBytes || 0) / Number(server.metrics?.mem?.total || server.metrics?.memTotalBytes || 1)) * 100}%`,
+                                                        transition: 'width 0.5s ease'
+                                                    }}></div>
+                                                </div>
+                                                <span className="mem-bar-pct">
+                                                    {((Number(server.metrics?.mem?.used || server.metrics?.memUsedBytes || 0) / Number(server.metrics?.mem?.total || server.metrics?.memTotalBytes || 1)) * 100).toFixed(1)}%
+                                                </span>
+                                            </div>
+                                            {/* Swap */}
+                                            {detailedMetrics?.swap && detailedMetrics.swap.total > 0 && (
+                                                <div className="mem-bar-container">
+                                                    <div className="mem-bar-label">Swap</div>
+                                                    <div className="progress" style={{ height: '8px', borderRadius: '4px' }}>
+                                                        <div className="progress-bar progress-bar-danger" style={{
+                                                            width: `${detailedMetrics.swap.percent}%`,
+                                                            transition: 'width 0.5s ease'
+                                                        }}></div>
+                                                    </div>
+                                                    <span className="mem-bar-pct">
+                                                        {(detailedMetrics.swap.used / 1024 / 1024).toFixed(0)} MB
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Load Average */}
+                                    <div className="metric-card-detailed metric-card-compact">
+                                        <div className="metric-card-title">
+                                            <span className="material-symbols-outlined">speed</span>
+                                            Load Average
+                                        </div>
+                                        <div className="load-avg-grid">
+                                            <div className="load-avg-item">
+                                                <span className="load-avg-period">1 min</span>
+                                                <span className="load-avg-value">{(server.metrics?.load?.avg1 || server.metrics?.loadAvg1 || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="load-avg-item">
+                                                <span className="load-avg-period">5 min</span>
+                                                <span className="load-avg-value">{(server.metrics?.load?.avg5 || server.metrics?.loadAvg5 || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="load-avg-item">
+                                                <span className="load-avg-period">15 min</span>
+                                                <span className="load-avg-value">{(server.metrics?.load?.avg15 || server.metrics?.loadAvg15 || 0).toFixed(2)}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Network summary */}
+                                        <div className="metric-card-title" style={{ marginTop: '1.5rem' }}>
+                                            <span className="material-symbols-outlined">lan</span>
+                                            Retea (Total)
+                                        </div>
+                                        <div className="net-summary">
+                                            <div className="net-summary-item">
+                                                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--success)' }}>arrow_downward</span>
+                                                <span className="net-direction">In</span>
+                                                <span className="net-value">
+                                                    {((server.metrics?.net?.in || server.metrics?.netInBytes || 0) / 1024 / 1024).toFixed(1)} MB
+                                                </span>
+                                            </div>
+                                            <div className="net-summary-item">
+                                                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--primary)' }}>arrow_upward</span>
+                                                <span className="net-direction">Out</span>
+                                                <span className="net-value">
+                                                    {((server.metrics?.net?.out || server.metrics?.netOutBytes || 0) / 1024 / 1024).toFixed(1)} MB
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+
+                                {/* Rand 2: Disc + Network per-interfata */}
+                                <div className="metrics-grid-wide">
+                                    {/* Disc per-partitie */}
+                                    <div className="metric-card-detailed">
+                                        <div className="metric-card-title">
+                                            <span className="material-symbols-outlined">hard_drive</span>
+                                            Disc
+                                        </div>
+                                        {detailedMetrics?.disks && detailedMetrics.disks.length > 0 ? (
+                                            <table className="metrics-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Mount</th>
+                                                        <th>Tip FS</th>
+                                                        <th>Folosit</th>
+                                                        <th>Total</th>
+                                                        <th style={{ width: '120px' }}>Utilizare</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {detailedMetrics.disks.map((disk, idx) => {
+                                                        const pct = disk.totalBytes > 0 ? (disk.usedBytes / disk.totalBytes) * 100 : 0;
+                                                        return (
+                                                            <tr key={idx}>
+                                                                <td><code>{disk.mountPoint}</code></td>
+                                                                <td>{disk.fsType}</td>
+                                                                <td>{(disk.usedBytes / 1024 / 1024 / 1024).toFixed(1)} GB</td>
+                                                                <td>{(disk.totalBytes / 1024 / 1024 / 1024).toFixed(1)} GB</td>
+                                                                <td>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                        <div className="progress" style={{ flex: 1, height: '6px' }}>
+                                                                            <div className="progress-bar" style={{
+                                                                                width: `${pct}%`,
+                                                                                backgroundColor: pct > 90 ? 'var(--danger)' : pct > 80 ? 'var(--warning)' : 'var(--primary)',
+                                                                                transition: 'width 0.5s ease'
+                                                                            }}></div>
+                                                                        </div>
+                                                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, minWidth: '35px' }}>{pct.toFixed(0)}%</span>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        ) : (
+                                            /* Fallback disc simplu */
+                                            <div className="mem-bar-container" style={{ marginTop: '1rem' }}>
+                                                <div className="mem-bar-label">/</div>
+                                                <div className="progress" style={{ height: '12px', borderRadius: '6px' }}>
+                                                    <div className="progress-bar progress-bar-primary" style={{
+                                                        width: `${(Number(server.metrics?.disk?.used || server.metrics?.diskUsedBytes || 0) / Number(server.metrics?.disk?.total || server.metrics?.diskTotalBytes || 1)) * 100}%`
+                                                    }}></div>
+                                                </div>
+                                                <span className="mem-bar-pct">
+                                                    {((server.metrics?.disk?.used || server.metrics?.diskUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(1)} /
+                                                    {((server.metrics?.disk?.total || server.metrics?.diskTotalBytes || 1) / 1024 / 1024 / 1024).toFixed(0)} GB
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Network per-interfata */}
+                                    {detailedMetrics?.netInterfaces && detailedMetrics.netInterfaces.length > 0 && (
+                                        <div className="metric-card-detailed">
+                                            <div className="metric-card-title">
+                                                <span className="material-symbols-outlined">wifi</span>
+                                                Interfete Retea
+                                            </div>
+                                            <table className="metrics-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Interfata</th>
+                                                        <th>RX (Bytes)</th>
+                                                        <th>TX (Bytes)</th>
+                                                        <th>Pachete In</th>
+                                                        <th>Pachete Out</th>
+                                                        <th>Erori</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {detailedMetrics.netInterfaces.map((iface, idx) => (
+                                                        <tr key={idx}>
+                                                            <td><code>{iface.name}</code></td>
+                                                            <td>{(iface.bytesRecv / 1024 / 1024).toFixed(1)} MB</td>
+                                                            <td>{(iface.bytesSent / 1024 / 1024).toFixed(1)} MB</td>
+                                                            <td>{iface.packetsIn?.toLocaleString()}</td>
+                                                            <td>{iface.packetsOut?.toLocaleString()}</td>
+                                                            <td>
+                                                                <span style={{ color: iface.errors > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                                                    {iface.errors || 0}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Rand 3: Top procese */}
+                                {detailedMetrics?.topProcesses && detailedMetrics.topProcesses.length > 0 && (
+                                    <div className="metric-card-detailed full-width">
+                                        <div className="metric-card-title">
+                                            <span className="material-symbols-outlined">monitoring</span>
+                                            Top Procese
+                                        </div>
+                                        <table className="metrics-table processes-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>PID</th>
+                                                    <th>Nume</th>
+                                                    <th>CPU %</th>
+                                                    <th>Memorie</th>
+                                                    <th>Comanda</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {detailedMetrics.topProcesses.map((proc, idx) => (
+                                                    <tr key={idx} className={idx < 3 ? 'proc-highlight' : ''}>
+                                                        <td className="proc-pid">{proc.pid}</td>
+                                                        <td><strong>{proc.name}</strong></td>
+                                                        <td>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <div className="progress" style={{ width: '50px', height: '4px' }}>
+                                                                    <div className="progress-bar" style={{
+                                                                        width: `${Math.min(proc.cpu, 100)}%`,
+                                                                        backgroundColor: proc.cpu > 50 ? 'var(--danger)' : 'var(--primary)',
+                                                                        transition: 'width 0.3s ease'
+                                                                    }}></div>
+                                                                </div>
+                                                                <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                                                                    {proc.cpu.toFixed(1)}%
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                                                            {proc.memMB.toFixed(1)} MB
+                                                        </td>
+                                                        <td className="proc-command">
+                                                            <code>{proc.command}</code>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {/* Fallback: top procese lista simpla (daca nu avem detaliate) */}
+                                {!detailedMetrics?.topProcesses && server.metrics?.topProcs && (
+                                    <div className="metric-card-detailed full-width">
+                                        <div className="metric-card-title">
+                                            <span className="material-symbols-outlined">monitoring</span>
+                                            Top Procese (basic)
+                                        </div>
+                                        <div className="tag-cloud" style={{ padding: '1rem' }}>
+                                            {server.metrics.topProcs.map((proc, idx) => (
+                                                <span key={idx} className="badge badge-neutral">{proc}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </>
                 )}
