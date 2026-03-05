@@ -36,10 +36,10 @@ for cmd in curl sudo; do
     fi
 done
 
-# Setare URL backend (daca nu e setat din argumente, incearca sa il deduca sau cere input)
-# In mod normal, acest script este rulat cu curl http://.../install.sh | bash
-# Daca este rulat direct, putem lua URL-ul.
-# Pentru simplitate, presupunem ca scriptul si binarul sunt in acelasi loc SAU userul ruleaza comanda compusa.
+# Setare URL backend
+# Script rulat de obicei via curl pipe
+# Daca e rulat direct, preluam URL
+# Presupunem script si binar in acelasi loc sau comanda compusa
 
 echo "[1/4] Verificare si Descarcare Binar..."
     # Detectare arhitectura pentru download
@@ -58,7 +58,7 @@ echo "[1/4] Verificare si Descarcare Binar..."
 
     # Setare URL backend implicit daca nu este furnizat
     if [ -z "$SERVER_URL" ]; then
-        # Default fallback (dar ar trebui sa fie furnizat in argumente)
+        # Fallback implicit (trebuie furnizat in argumente)
         echo "EROARE: URL-ul backend-ului nu a fost furnizat."
         echo "Utilizare: curl ... | sudo bash -s -- http://BACKEND_IP:3000"
         exit 1
@@ -83,7 +83,7 @@ mkdir -p "$CONFIG_DIR"
 mkdir -p "$CONFIG_DIR/certs"
 chmod 755 "$CONFIG_DIR"
 
-# Prompt interactiv - Service sau Standalone?
+# Prompt interactiv - Serviciu sau Standalone?
 echo ""
 echo "Cum vrei sa ruleze agentul?"
 echo "  1) Ca serviciu systemd (Recomandat - porneste automat)"
