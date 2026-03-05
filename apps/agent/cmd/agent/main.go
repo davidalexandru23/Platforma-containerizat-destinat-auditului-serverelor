@@ -114,6 +114,15 @@ Pentru prod, utilizare serviciu systemd:
 			}
 			fmt.Printf("Metrics Int:   %ds\n", cfg.MetricsInterval)
 			fmt.Printf("Inventory Int: %ds\n", cfg.InventoryInterval)
+
+			fmt.Println("\n--- SNMP Status ---")
+			if cfg.SNMPEnabled {
+				fmt.Printf("Enabled:       Yes\n")
+				fmt.Printf("Target:        %s:%d\n", cfg.SNMPTarget, cfg.SNMPPort)
+				fmt.Printf("Interval:      %ds\n", cfg.SNMPInterval)
+			} else {
+				fmt.Printf("Enabled:       No\n")
+			}
 			return nil
 		},
 	}
