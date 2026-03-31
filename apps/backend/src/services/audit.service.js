@@ -176,10 +176,10 @@ async function runAudit(data, userId) {
             });
             return { auditRun: { ...auditRun, status: 'COMPLETED' }, message: 'Audit finalizat (fara verificari)' };
         } else {
-            console.log('Only manual tasks found. Audit set to IN_PROGRESS for human review.');
+            console.log('Only manual tasks found. Audit set to RUNNING for human review.');
             await prisma.auditRun.update({
                 where: { id: auditRun.id },
-                data: { status: 'IN_PROGRESS', startedAt: new Date() }
+                data: { status: 'RUNNING', startedAt: new Date() }
             });
             return { auditRun, message: 'Audit creat (doar verificari manuale)' };
         }
