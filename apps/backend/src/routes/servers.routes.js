@@ -338,4 +338,104 @@ router.post('/:id/run-check',
     }
 );
 
+/**
+ * @swagger
+ * /servers/{id}/containers:
+ *   get:
+ *     tags: [Servers]
+ *     summary: Lista containere descoperite pentru server
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get('/:id/containers',
+    authenticate,
+    async (req, res, next) => {
+        try {
+            const containersService = await import('../services/containers.service.js');
+            const containers = await containersService.listContainers(req.params.id, {
+                filter: req.query.filter,
+                runtime: req.query.runtime,
+                search: req.query.search,
+            });
+            res.json(containers);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+/**
+ * @swagger
+ * /servers/{id}/containers/{containerId}:
+ *   get:
+ *     tags: [Servers]
+ *     summary: Detalii container
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get('/:id/containers/:containerId',
+    authenticate,
+    async (req, res, next) => {
+        try {
+            const containersService = await import('../services/containers.service.js');
+            const container = await containersService.getContainer(req.params.id, req.params.containerId);
+            res.json(container);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+/**
+ * @swagger
+ * /servers/{id}/containers/refresh:
+ *   post:
+ *     tags: [Servers]
+ *     summary: Redescoperire containere (trimite comanda ad-hoc catre agent)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post('/:id/containers/refresh',
+    authenticate,
+    authorize('ADMIN', 'AUDITOR'),
+    async (req, res, next) => {
+        try {
+            const agentService = await import('../services/agent.service.js');
+            // Trimite comanda ad-hoc care determina agentul sa ruleze container discovery
+            // si sa posteze rezultatul la /api/agent/:serverId/containers
+            const result = await agentService.runAdhocCheck(req.params.id, {
+                command: 'echo CONTAINER_DISCOVERY_TRIGGER',
+                checkType: 'CONTAINER_DISCOVERY',
+                expectedResult: 'CONTAINER_DISCOVERY_TRIGGER',
+                comparison: 'CONTAINS',
+            });
+            res.json({ message: 'Refresh solicitat', ...result });
+        } catch (error) {
+            // Eroare de timeout sau alta eroare = agent nu e disponibil
+            res.status(202).json({ message: 'Refresh solicitat (agent poate fi offline)', queued: true });
+        }
+    }
+);
+
+/**
+ * @swagger
+ * /servers/{id}/containers/{containerId}/audits:
+ *   get:
+ *     tags: [Servers]
+ *     summary: Istoric audituri pentru container
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get('/:id/containers/:containerId/audits',
+    authenticate,
+    async (req, res, next) => {
+        try {
+            const containersService = await import('../services/containers.service.js');
+            const audits = await containersService.getContainerAuditHistory(
+                req.params.id,
+                req.params.containerId
+            );
+            res.json(audits);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 export default router;

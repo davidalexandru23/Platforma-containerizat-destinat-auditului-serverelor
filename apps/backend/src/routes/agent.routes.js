@@ -120,4 +120,28 @@ router.get('/:serverId/audit/pending',
     }
 );
 
+/**
+ * @swagger
+ * /agent/{serverId}/containers:
+ *   post:
+ *     tags: [Agent]
+ *     summary: Incarcare inventar containere de la agent
+ */
+router.post('/:serverId/containers',
+    agentLimiter,
+    async (req, res, next) => {
+        try {
+            const agentToken = req.headers['x-agent-token'];
+            const result = await agentService.submitContainerInventory(
+                req.params.serverId,
+                req.body.containers || req.body,
+                agentToken
+            );
+            res.json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 export default router;

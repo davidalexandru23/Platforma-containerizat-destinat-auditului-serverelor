@@ -54,6 +54,10 @@ type PendingCheck struct {
 	OnFailMessage    string   `json:"onFailMessage"`
 	PlatformScope    []string `json:"platformScope"`
 	Signature        string   `json:"signature"` // Semnatura verificare comanda
+	// Camp??uri pentru verificari de container
+	TargetScope string `json:"targetScope"`  // HOST | CONTAINER
+	ContainerID string `json:"containerId"`  // ID nativ docker/podman
+	Runtime     string `json:"runtime"`      // docker | podman
 }
 
 func (c *Client) GetPendingChecks() ([]PendingCheck, error) {
@@ -101,6 +105,14 @@ func (c *Client) SendCheckResults(auditRunID string, results []CheckResult) erro
 		"results": results,
 	}
 	return c.post(fmt.Sprintf("/api/agent/%s/audit/%s/results", c.serverID, auditRunID), payload)
+}
+
+// SendContainerInventory trimite inventarul containerelor descoperite la backend.
+func (c *Client) SendContainerInventory(containers interface{}) error {
+	payload := map[string]interface{}{
+		"containers": containers,
+	}
+	return c.post(fmt.Sprintf("/api/agent/%s/containers", c.serverID), payload)
 }
 
 func (c *Client) post(path string, data interface{}) error {

@@ -1,0 +1,437 @@
+{
+    "metadata": {
+        "name": "Container Runtime Security Baseline (Docker/Podman)",
+        "description": "Template de securitate pentru containere Docker si Podman bazat pe CIS Docker Benchmark si bune practici din industrie. Verifica configuratia de securitate a fiecarui container in parte: privilege escalation, namespace sharing, capabilities, filesystem safety, image hygiene si configuratie runtime. Fiecare verificare automata tinteste un container specific folosind {{CONTAINER_ID}} si {{RUNTIME}} injectate de platforma.",
+        "version": "1.0.0",
+        "type": "CONTAINER_SECURITY",
+        "author": "BitTrail Platform",
+        "createdAt": "2026-03-31T00:00:00Z"
+    },
+    "controls": [
+        {
+            "controlId": "CR-1",
+            "title": "Container Privilege Escalation & Root Execution",
+            "category": "CONTAINER_SECURITY",
+            "severity": "CRITICAL",
+            "rationale": "Containere privilegiate sau rulate ca root permit escaladarea privilegiilor catre gazda. Aceasta este una din cele mai critice greseli de configurare in medii containerizate.",
+            "automatedChecks": [
+                {
+                    "checkId": "CR-1.1",
+                    "title": "Container ruleaza in mod privilegiat",
+                    "description": "Detectie flag --privileged care acorda acces deplin la dispozitivele gazdei",
+                    "command": "{{RUNTIME}} inspect --format '{{.HostConfig.Privileged}}' {{CONTAINER_ID}} 2>/dev/null",
+                    "expectedResult": "false",
+                    "comparison": "EQUALS",
+                    "checkType": "COMMAND",
+                    "parser": "FIRST_LINE",
+                    "normalize": ["TRIM", "LOWER"],
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul ruleaza in mod privilegiat. Aceasta acorda acces complet la dispozitivele gazdei si trebuie evitat."
+                },
+                {
+                    "checkId": "CR-1.2",
+                    "title": "Utilizatorul implicit din container (root detection)",
+                    "description": "Verifica daca procesul principal din container ruleaza ca root (UID 0)",
+                    "command": "USER=$({{RUNTIME}} inspect --format '{{.Config.User}}' {{CONTAINER_ID}} 2>/dev/null); if [ -z \"$USER\" ] || [ \"$USER\" = '0' ] || [ \"$USER\" = 'root' ]; then echo 'USER=root'; echo 'CHECK=FAIL'; else echo \"USER=$USER\"; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul ruleaza ca root. Specificati un utilizator non-root in Dockerfile (USER <uid>) sau la runtime (--user)."
+                },
+                {
+                    "checkId": "CR-1.3",
+                    "title": "Privilege escalation (no-new-privileges)",
+                    "description": "Verifica daca flagul no-new-privileges este setat pentru a preveni SUID/SGID escalation",
+                    "command": "RESULT=$({{RUNTIME}} inspect --format '{{.HostConfig.SecurityOpt}}' {{CONTAINER_ID}} 2>/dev/null); if echo \"$RESULT\" | grep -q 'no-new-privileges'; then echo 'NO_NEW_PRIVS=true'; echo 'CHECK=PASS'; else echo 'NO_NEW_PRIVS=false'; echo 'CHECK=FAIL'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Flagul no-new-privileges nu este setat. Adaugati --security-opt no-new-privileges:true la rulare."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "CR-1.M1",
+                    "title": "Revizie politici de access management pentru containere",
+                    "description": "Exista politici clare care definesc ce containere pot fi rulate privilegiat si procesul de aprobare?",
+                    "instructions": "Verificati documentatia interna si confirmati existenta unui proces de aprobare pentru containere privilegiate.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "CR-2",
+            "title": "Host Namespace Sharing",
+            "category": "CONTAINER_SECURITY",
+            "severity": "CRITICAL",
+            "rationale": "Partajarea namespace-urilor de retea, PID sau IPC cu gazda elimina izolarea containerului si poate permite atacuri de tip container escape.",
+            "automatedChecks": [
+                {
+                    "checkId": "CR-2.1",
+                    "title": "Host network namespace (--network=host)",
+                    "description": "Detectie partajare stack de retea cu gazda",
+                    "command": "RESULT=$({{RUNTIME}} inspect --format '{{.HostConfig.NetworkMode}}' {{CONTAINER_ID}} 2>/dev/null); echo \"NETWORK_MODE=$RESULT\"; if [ \"$RESULT\" = 'host' ]; then echo 'CHECK=FAIL'; else echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul partajeaza namespace-ul de retea cu gazda (--network=host). Aceasta elimina izolarea retelei."
+                },
+                {
+                    "checkId": "CR-2.2",
+                    "title": "Host PID namespace (--pid=host)",
+                    "description": "Detectie partajare spatiu PID cu gazda",
+                    "command": "RESULT=$({{RUNTIME}} inspect --format '{{.HostConfig.PidMode}}' {{CONTAINER_ID}} 2>/dev/null); echo \"PID_MODE=$RESULT\"; if [ \"$RESULT\" = 'host' ]; then echo 'CHECK=FAIL'; else echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul partajeaza namespace-ul PID cu gazda. Procesele din container pot vedea si interactiona cu procesele gazdei."
+                },
+                {
+                    "checkId": "CR-2.3",
+                    "title": "Host IPC namespace (--ipc=host)",
+                    "description": "Detectie partajare IPC (shared memory, semafoare) cu gazda",
+                    "command": "RESULT=$({{RUNTIME}} inspect --format '{{.HostConfig.IpcMode}}' {{CONTAINER_ID}} 2>/dev/null); echo \"IPC_MODE=$RESULT\"; if [ \"$RESULT\" = 'host' ] || [ \"$RESULT\" = 'shareable' ]; then echo 'CHECK=WARN'; else echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul partajeaza namespace-ul IPC cu gazda sau alte containere. Aceasta poate permite atacuri de tip shared memory."
+                }
+            ],
+            "manualChecks": []
+        },
+        {
+            "controlId": "CR-3",
+            "title": "Linux Capabilities & Security Profiles",
+            "category": "CONTAINER_SECURITY",
+            "severity": "HIGH",
+            "rationale": "Capabilities Linux adaugate explicit pot permite escaladarea privilegiilor. Profilurile seccomp si AppArmor/SELinux limiteaza syscall-urile disponibile containerului.",
+            "automatedChecks": [
+                {
+                    "checkId": "CR-3.1",
+                    "title": "Capabilities adaugate (CapAdd)",
+                    "description": "Lista capabilities adaugate explicit containerului",
+                    "command": "CAPS=$({{RUNTIME}} inspect --format '{{.HostConfig.CapAdd}}' {{CONTAINER_ID}} 2>/dev/null); echo \"CAP_ADD=$CAPS\"; if [ -z \"$CAPS\" ] || [ \"$CAPS\" = '[]' ] || [ \"$CAPS\" = '<nil>' ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul are capabilities adaugate explicit. Verificati daca sunt necesare si documentati rationale."
+                },
+                {
+                    "checkId": "CR-3.2",
+                    "title": "CAP_SYS_ADMIN — capability periculoasa",
+                    "description": "CAP_SYS_ADMIN este echivalent cu root deplin si trebuie evitat",
+                    "command": "CAPS=$({{RUNTIME}} inspect --format '{{.HostConfig.CapAdd}}' {{CONTAINER_ID}} 2>/dev/null); if echo \"$CAPS\" | grep -qi 'SYS_ADMIN\\|ALL'; then echo 'CAP_SYS_ADMIN=PRESENT'; echo 'CHECK=FAIL'; else echo 'CAP_SYS_ADMIN=ABSENT'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul are CAP_SYS_ADMIN sau ALL capabilities. Aceasta este o problema critica de securitate."
+                },
+                {
+                    "checkId": "CR-3.3",
+                    "title": "Profil seccomp aplicat",
+                    "description": "Verifica daca un profil seccomp este aplicat (restrictioneaza syscall-uri)",
+                    "command": "RESULT=$({{RUNTIME}} inspect --format '{{.HostConfig.SecurityOpt}}' {{CONTAINER_ID}} 2>/dev/null); echo \"SECURITY_OPT=$RESULT\"; if echo \"$RESULT\" | grep -qi 'seccomp'; then echo 'SECCOMP=APPLIED'; echo 'CHECK=PASS'; elif [ \"$RESULT\" = '[]' ] || [ -z \"$RESULT\" ]; then echo 'SECCOMP=DEFAULT'; echo 'CHECK=PASS'; else echo 'SECCOMP=UNKNOWN'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Nu se poate determina profilul seccomp aplicat."
+                },
+                {
+                    "checkId": "CR-3.4",
+                    "title": "AppArmor / SELinux label aplicat",
+                    "description": "Verifica daca un label AppArmor sau SELinux este aplicat containerului",
+                    "command": "RESULT=$({{RUNTIME}} inspect --format '{{.HostConfig.SecurityOpt}}' {{CONTAINER_ID}} 2>/dev/null); if echo \"$RESULT\" | grep -qiE 'apparmor|label'; then echo 'MAC_PROFILE=APPLIED'; echo 'CHECK=PASS'; else echo 'MAC_PROFILE=MISSING'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Nu este aplicat niciun profil AppArmor sau SELinux. Adaugati --security-opt apparmor=<profile> pentru control mai strict."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "CR-3.M1",
+                    "title": "Revizie capabilities necesare",
+                    "description": "Documentati si justificati fiecare capability adaugata explicit",
+                    "instructions": "Lista capabilities adaugate si confirmati ca fiecare este necesara si minima pentru functionalitatea ceruta.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "CR-4",
+            "title": "Filesystem Safety & Mount Security",
+            "category": "CONTAINER_SECURITY",
+            "severity": "HIGH",
+            "rationale": "Filesystem-ul read-only si restrictionarea mount-urilor sensibile reduc semnificativ suprafata de atac. Montarea docker.sock in container este echivalenta cu acces root pe gazda.",
+            "automatedChecks": [
+                {
+                    "checkId": "CR-4.1",
+                    "title": "Filesystem radacina read-only",
+                    "description": "Verifica daca filesystem-ul radacina al containerului este mounted read-only",
+                    "command": "RESULT=$({{RUNTIME}} inspect --format '{{.HostConfig.ReadonlyRootfs}}' {{CONTAINER_ID}} 2>/dev/null); echo \"READONLY_ROOTFS=$RESULT\"; if [ \"$RESULT\" = 'true' ]; then echo 'CHECK=PASS'; else echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Filesystem-ul radacina nu este read-only. Utilizati --read-only si montati volume temporare pentru date mutabile."
+                },
+                {
+                    "checkId": "CR-4.2",
+                    "title": "Docker/Podman socket montat in container",
+                    "description": "Detectie montare /var/run/docker.sock sau /run/podman/podman.sock in container",
+                    "command": "MOUNTS=$({{RUNTIME}} inspect --format '{{json .Mounts}}' {{CONTAINER_ID}} 2>/dev/null); if echo \"$MOUNTS\" | grep -qE 'docker\\.sock|podman\\.sock'; then echo 'SOCKET_MOUNT=DETECTED'; echo 'CHECK=FAIL'; else echo 'SOCKET_MOUNT=NONE'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "CRITIC: Socket-ul Docker/Podman este montat in container. Aceasta acorda control deplin al daemon-ului runtime si este echivalent cu root pe gazda."
+                },
+                {
+                    "checkId": "CR-4.3",
+                    "title": "Mount-uri catre directoare sensibile ale gazdei",
+                    "description": "Detectie bind mounts catre /etc, /proc, /sys, /root, /home pe gazda",
+                    "command": "MOUNTS=$({{RUNTIME}} inspect --format '{{json .Mounts}}' {{CONTAINER_ID}} 2>/dev/null); SENSITIVE=$(echo \"$MOUNTS\" | grep -oE '\"Source\":\"/?(etc|proc|sys|root|home|usr/bin|usr/sbin)[^\"]*\"' | wc -l); echo \"SENSITIVE_MOUNTS=$SENSITIVE\"; if [ \"$SENSITIVE\" -gt 0 ]; then echo 'CHECK=WARN'; echo \"$MOUNTS\" | grep -oE '\"Source\":\"/?(etc|proc|sys|root|home|usr/bin|usr/sbin)[^\"]*\"'; else echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul are mount-uri catre directoare sensibile ale gazdei. Revizuiti necesitatea fiecarui mount."
+                },
+                {
+                    "checkId": "CR-4.4",
+                    "title": "Mount-uri cu acces read-write (inventar)",
+                    "description": "Lista tuturor bind mounts cu acces read-write",
+                    "command": "MOUNTS=$({{RUNTIME}} inspect --format '{{json .Mounts}}' {{CONTAINER_ID}} 2>/dev/null); RW_MOUNTS=$(echo \"$MOUNTS\" | grep -c '\"RW\":true' 2>/dev/null || echo 0); echo \"RW_MOUNTS=$RW_MOUNTS\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "CR-4.M1",
+                    "title": "Revizie bind mounts — justificare si principiu least-privilege",
+                    "description": "Fiecare volume/bind mount trebuie justificat si limitat la permisiuni minime",
+                    "instructions": "Analizati lista de mounts si confirmati ca fiecare este necesar, documentat si are permisiunile minime (RO unde posibil).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "CR-5",
+            "title": "Image Hygiene & Supply Chain",
+            "category": "CONTAINER_SECURITY",
+            "severity": "HIGH",
+            "rationale": "Imaginile cu tag :latest nu sunt reproductibile si pot introduce cod neverificat. Lipsa digest pinning face imposibila verificarea integritatii imaginii la rulare.",
+            "automatedChecks": [
+                {
+                    "checkId": "CR-5.1",
+                    "title": "Tag :latest utilizat",
+                    "description": "Containerul foloseste tag :latest care nu garanteaza reproducibilitate",
+                    "command": "IMAGE=$({{RUNTIME}} inspect --format '{{.Config.Image}}' {{CONTAINER_ID}} 2>/dev/null); echo \"IMAGE=$IMAGE\"; if echo \"$IMAGE\" | grep -qE ':latest$|^[^:]+$'; then echo 'LATEST_TAG=YES'; echo 'CHECK=FAIL'; else echo 'LATEST_TAG=NO'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Imaginea foloseste tag :latest. Specificati un tag de versiune precisa sau un digest SHA256 pentru reproducibilitate."
+                },
+                {
+                    "checkId": "CR-5.2",
+                    "title": "Digest pinning verificat",
+                    "description": "Verifica daca imaginea a fost trasa cu digest SHA256 explicit",
+                    "command": "DIGESTS=$({{RUNTIME}} inspect --format '{{json .RepoDigests}}' {{CONTAINER_ID}} 2>/dev/null); echo \"REPO_DIGESTS=$DIGESTS\"; if [ \"$DIGESTS\" = '[]' ] || [ \"$DIGESTS\" = 'null' ] || [ -z \"$DIGESTS\" ]; then echo 'DIGEST_PINNED=NO'; echo 'CHECK=WARN'; else echo 'DIGEST_PINNED=YES'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Imaginea nu are digest SHA256 disponibil. Preferati imagini trase cu @sha256:<hash> pentru garantarea integritatii."
+                },
+                {
+                    "checkId": "CR-5.3",
+                    "title": "Registry surs?? imagine (inventar)",
+                    "description": "Identifica registry-ul din care a fost trasa imaginea",
+                    "command": "IMAGE=$({{RUNTIME}} inspect --format '{{.Config.Image}}' {{CONTAINER_ID}} 2>/dev/null); REGISTRY=$(echo \"$IMAGE\" | awk -F/ 'NF>2{print $1}NF==2{print $1}NF==1{print \"docker.io\"}'); echo \"REGISTRY=$REGISTRY\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "CR-5.M1",
+                    "title": "Politica de imagini aprobate si process de scanning",
+                    "description": "Exista o lista de registry-uri aprobate si un proces de scanare a vulnerabilitatilor (SCA/SAST) pentru imagini?",
+                    "instructions": "Confirmati existenta policies pentru imagini: registry whitelist, scanning obligatoriu (Trivy/Grype), si semnare (cosign/notary).",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "CR-6",
+            "title": "Runtime Configuration Safety",
+            "category": "CONTAINER_SECURITY",
+            "severity": "MEDIUM",
+            "rationale": "Politicile de restart necontrolate, lipsa limitelor de resurse si porturile publicate forteaza administrative overhead si pot expune servicii nedorit.",
+            "automatedChecks": [
+                {
+                    "checkId": "CR-6.1",
+                    "title": "Politica restart (restart policy)",
+                    "description": "Inventar politica de restart configured pe container",
+                    "command": "POLICY=$({{RUNTIME}} inspect --format '{{.HostConfig.RestartPolicy.Name}}' {{CONTAINER_ID}} 2>/dev/null); MAX=$({{RUNTIME}} inspect --format '{{.HostConfig.RestartPolicy.MaximumRetryCount}}' {{CONTAINER_ID}} 2>/dev/null); echo \"RESTART_POLICY=$POLICY\"; echo \"MAX_RETRY=$MAX\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER"
+                },
+                {
+                    "checkId": "CR-6.2",
+                    "title": "Limite de memorie configurate",
+                    "description": "Verifica daca exista limite de memorie pentru a preveni OOM pe gazda",
+                    "command": "MEM=$({{RUNTIME}} inspect --format '{{.HostConfig.Memory}}' {{CONTAINER_ID}} 2>/dev/null); echo \"MEMORY_LIMIT=$MEM\"; if [ \"$MEM\" = '0' ] || [ -z \"$MEM\" ]; then echo 'MEMORY_LIMIT=NONE'; echo 'CHECK=WARN'; else echo 'MEMORY_LIMIT=SET'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Nu sunt configurate limite de memorie. Fara limit, un container poate consuma toata memoria gazdei, cauzand OOM."
+                },
+                {
+                    "checkId": "CR-6.3",
+                    "title": "Porturi publicate (inventar)",
+                    "description": "Lista porturilor expuse din container catre gazda",
+                    "command": "PORTS=$({{RUNTIME}} inspect --format '{{json .NetworkSettings.Ports}}' {{CONTAINER_ID}} 2>/dev/null); echo \"PORTS=$PORTS\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER"
+                },
+                {
+                    "checkId": "CR-6.4",
+                    "title": "Healthcheck configurat",
+                    "description": "Verifica daca imaginea/containerul are un healthcheck definit",
+                    "command": "HC=$({{RUNTIME}} inspect --format '{{json .Config.Healthcheck}}' {{CONTAINER_ID}} 2>/dev/null); if [ -z \"$HC\" ] || [ \"$HC\" = 'null' ] || echo \"$HC\" | grep -q 'NONE'; then echo 'HEALTHCHECK=MISSING'; echo 'CHECK=WARN'; else echo 'HEALTHCHECK=CONFIGURED'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul nu are healthcheck configurat. Fara healthcheck, orchestratorii nu pot detecta stari de eroare."
+                },
+                {
+                    "checkId": "CR-6.5",
+                    "title": "Numar variabile de mediu (fara valori)",
+                    "description": "Numara variabilele de mediu transmise containerului (fara a expune valorile)",
+                    "command": "COUNT=$({{RUNTIME}} inspect --format '{{len .Config.Env}}' {{CONTAINER_ID}} 2>/dev/null); echo \"ENV_VAR_COUNT=$COUNT\"; if [ \"$COUNT\" -gt 50 ]; then echo 'ENV_VARS=HIGH'; echo 'CHECK=WARN'; else echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul are un numar mare de variabile de mediu. Verificati ca secretele nu sunt transmise prin ENV ci prin mecanisme dedicate (Vault, Kubernetes Secrets)."
+                },
+                {
+                    "checkId": "CR-6.6",
+                    "title": "Limite CPU configurate",
+                    "description": "Verifica daca exista cota CPU pentru a preveni starvation pe gazda",
+                    "command": "CPU=$({{RUNTIME}} inspect --format '{{.HostConfig.CpuQuota}}' {{CONTAINER_ID}} 2>/dev/null); CPUSHARES=$({{RUNTIME}} inspect --format '{{.HostConfig.CpuShares}}' {{CONTAINER_ID}} 2>/dev/null); echo \"CPU_QUOTA=$CPU\"; echo \"CPU_SHARES=$CPUSHARES\"; if [ \"$CPU\" = '0' ] && [ \"$CPUSHARES\" = '0' ]; then echo 'CPU_LIMIT=NONE'; echo 'CHECK=WARN'; else echo 'CPU_LIMIT=SET'; echo 'CHECK=PASS'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Nu sunt configurate limite CPU. Fara cotă CPU, un container poate monopoliza resursele gazdei."
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "CR-6.M1",
+                    "title": "Revizie variabile de mediu — secretele nu sunt in ENV",
+                    "description": "Confirmati ca secretele (parole, token-uri, chei API) NU sunt transmise prin variabile de mediu",
+                    "instructions": "Analizati configuratia deployment (docker-compose, helm, k8s yaml) si confirmati ca secretele sunt gestionate prin Vault, Kubernetes Secrets sau echivalent, nu prin ENV.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                }
+            ]
+        },
+        {
+            "controlId": "CR-7",
+            "title": "Container Metadata & Compose Labels",
+            "category": "CONTAINER_SECURITY",
+            "severity": "LOW",
+            "rationale": "Label-urile containerelor ofera vizibilitate asupra provenienta deployment-ului si facilitateaza auditabilitatea. Containerele oprite de mult timp reprezinta acumulare de suprafata de atac.",
+            "automatedChecks": [
+                {
+                    "checkId": "CR-7.1",
+                    "title": "Labels Docker Compose sau custom",
+                    "description": "Verifica prezenta label-urilor de tracking (compose project, owner, environment)",
+                    "command": "LABELS=$({{RUNTIME}} inspect --format '{{json .Config.Labels}}' {{CONTAINER_ID}} 2>/dev/null); echo \"LABELS=$LABELS\"; HAS_COMPOSE=$(echo \"$LABELS\" | grep -c 'com.docker.compose' || true); HAS_LABELS=$(echo \"$LABELS\" | grep -c '\".*\":' || true); if [ \"$HAS_LABELS\" -gt 0 ]; then echo 'CHECK=PASS'; else echo 'LABELS=EMPTY'; echo 'CHECK=WARN'; fi",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER",
+                    "onFailMessage": "Containerul nu are label-uri configurate. Adaugati label-uri pentru tracking: environment, owner, version, project."
+                },
+                {
+                    "checkId": "CR-7.2",
+                    "title": "Starea containerului si durata (running vs stopped)",
+                    "description": "Verificarea statusului si timpului de la ultima pornire/oprire",
+                    "command": "STATUS=$({{RUNTIME}} inspect --format '{{.State.Status}}' {{CONTAINER_ID}} 2>/dev/null); STARTED=$({{RUNTIME}} inspect --format '{{.State.StartedAt}}' {{CONTAINER_ID}} 2>/dev/null); FINISHED=$({{RUNTIME}} inspect --format '{{.State.FinishedAt}}' {{CONTAINER_ID}} 2>/dev/null); echo \"STATUS=$STATUS\"; echo \"STARTED=$STARTED\"; echo \"FINISHED=$FINISHED\"; echo 'CHECK=PASS'",
+                    "expectedResult": "CHECK=PASS",
+                    "comparison": "CONTAINS",
+                    "checkType": "COMMAND",
+                    "targetScope": "CONTAINER"
+                }
+            ],
+            "manualChecks": [
+                {
+                    "checkId": "CR-7.M1",
+                    "title": "Politica containere oprite (cleanup)",
+                    "description": "Exista o politica de curatare pentru containere oprite de mult timp?",
+                    "instructions": "Confirmati ca exista un proces automat sau manual de curatare a containerelor oprite si a imaginilor nefolositoare.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                },
+                {
+                    "checkId": "CR-7.M2",
+                    "title": "Revizie politici admission control (Kubernetes/OPA)",
+                    "description": "Daca containerele sunt orchestrate, exista politici de admission control (OPA/Gatekeeper, Kyverno)?",
+                    "instructions": "Documentati daca se foloseste admission control pentru a impune politici de securitate la nivel de cluster.",
+                    "evidenceSpec": {
+                        "allowUpload": true,
+                        "allowLink": true,
+                        "allowAttestation": true
+                    }
+                }
+            ]
+        }
+    ]
+}

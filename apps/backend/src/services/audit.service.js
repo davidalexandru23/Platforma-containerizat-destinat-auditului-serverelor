@@ -86,7 +86,15 @@ async function findById(id) {
  * @param {string} userId - ID-ul utilizatorului care a initiat auditul
  */
 async function runAudit(data, userId) {
-    const { serverId, templateId, excludedControlIds } = data;
+    const {
+        serverId,
+        templateId,
+        excludedControlIds,
+        targetType = 'SERVER',
+        targetContainerId = null,
+        targetRuntime = null,
+        targetContainerNativeId = null,
+    } = data;
 
     // Validare existenta server
     const server = await prisma.server.findUnique({
@@ -114,9 +122,21 @@ async function runAudit(data, userId) {
             status: 'PENDING',
             triggeredBy: userId,
             excludedControlIds: excludedControlIds || [],
+            targetType: targetType,
+            targetContainerId: targetContainerId || null,
+            targetRuntime: targetRuntime || null,
         },
     });
 
+    // Filtrare verificari in functie de targetType
+    // SERVER: doar HOST-scoped checks (si fara scope, pentru compat)
+    // CONTAINER: doar CONTAINER-scoped checks
+    const filterChecksByScope = (checks) => {
+        if (targetType === 'CONTAINER') {
+            return checks.filter(ch => ch.targetScope === 'CONTAINER');
+        }
+        return checks.filter(ch => ch.targetScope !== 'CONTAINER');
+    };
     // Pregatire sarcini manuale (nu depind de agent)
     const manualChecks = templateVersion.controls
         .filter(c => !excludedControlIds?.includes(c.controlId))
@@ -132,11 +152,11 @@ async function runAudit(data, userId) {
         });
     }
 
-    // Cleanup periodic metrici vechi (MetricSample, InventorySnapshot)
-
     // Calculare numar verificari automate necesare
     const activeControls = templateVersion.controls.filter(c => !excludedControlIds?.includes(c.controlId));
-    const totalAutomatedChecks = activeControls.reduce((sum, c) => sum + c.automatedChecks.length, 0);
+    const totalAutomatedChecks = activeControls.reduce(
+        (sum, c) => sum + filterChecksByScope(c.automatedChecks).length, 0
+    );
 
     console.log(`Reviewing audit plan: found ${totalAutomatedChecks} automated checks and ${manualChecks.length} manual tasks for template v${templateVersion.version}.`);
 
@@ -177,13 +197,12 @@ async function runAudit(data, userId) {
             io.of('/ws/audit').to(`audit:${auditRun.id}`).emit('progress', {
                 auditRunId: auditRun.id,
                 status: 'RUNNING',
-                message: 'Audit pornit, se asteapta rezultate',
+                message: targetType === 'CONTAINER'
+                    ? `Audit container pornit: ${targetContainerNativeId || targetContainerId || ''}`
+                    : 'Audit pornit, se asteapta rezultate',
                 progress: 0,
             });
         }
-    } else if (server.status !== 'ONLINE') {
-        // Server offline, ramane PENDING
-        // Notificare utilizator agent offline (TODO)
     }
 
     return { auditRun, message: 'Audit creat cu succes' };

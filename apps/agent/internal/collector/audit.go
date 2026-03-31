@@ -170,11 +170,20 @@ func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck)
 		return "", -1, fmt.Errorf("comanda blocata de agent: %s", reason)
 	}
 
+	// Handling special: CONTAINER_DISCOVERY trigger
+	// Aceasta comanda speciala determina agentul sa ruleze container discovery acum.
+	if check.CheckType == "CONTAINER_DISCOVERY" {
+		return "CONTAINER_DISCOVERY_TRIGGER", 0, nil
+	}
+
 	var cmd *exec.Cmd
 
 	if check.CheckType == "SCRIPT" {
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", check.Script)
 	} else {
+		// COMMAND, CONTAINER_EXEC, si orice alt tip — toti se executa ca shell commands
+		// Pentru comenzile CONTAINER: command-ul a fost deja interpolat cu CONTAINER_ID si RUNTIME
+		// de catre backend (ex: "docker inspect <id>")
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", check.Command)
 	}
 

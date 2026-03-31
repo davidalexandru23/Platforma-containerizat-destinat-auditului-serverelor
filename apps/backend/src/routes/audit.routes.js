@@ -192,4 +192,27 @@ router.post('/:runId/manual/:taskId/reset',
     }
 );
 
+/**
+ * @swagger
+ * /audit/run-container:
+ *   post:
+ *     tags: [Audit]
+ *     summary: Pornire audit pe container specific
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post('/run-container',
+    authenticate,
+    authorize('ADMIN', 'AUDITOR'),
+    auditLog('RUN_CONTAINER_AUDIT', 'AUDIT'),
+    async (req, res, next) => {
+        try {
+            const containersService = await import('../services/containers.service.js');
+            const result = await containersService.runContainerAudit(req.body, req.user.id);
+            res.status(201).json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 export default router;

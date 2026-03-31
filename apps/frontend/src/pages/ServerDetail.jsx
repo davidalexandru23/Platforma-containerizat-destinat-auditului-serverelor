@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import api from '../api/client';
 import './ServerDetail.css';
 import ShareServerModal from '../components/ShareServerModal';
+import ContainersTab from '../components/ContainersTab';
 
 function ServerDetail() {
     const { id } = useParams();
@@ -416,6 +417,12 @@ bittrail-agent version`;
                     onClick={() => setActiveTab('inventory')}
                 >
                     Configuratie
+                </button>
+                <button
+                    className={`tab ${activeTab === 'containers' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('containers')}
+                >
+                    Containere
                 </button>
                 <button
                     className={`tab ${activeTab === 'enrollment' ? 'active' : ''}`}
@@ -989,6 +996,10 @@ bittrail-agent version`;
                             </div>
                         )}
                     </div>
+                )}
+
+                {activeTab === 'containers' && (
+                    <ContainersTab serverId={id} templates={templates} />
                 )}
 
                 {activeTab === 'enrollment' && (

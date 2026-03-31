@@ -87,6 +87,17 @@ func Run(configPath string) error {
 				log.Printf("Error sending initial inventory: %v", err)
 			}
 		}
+		// Container discovery initiala
+		containers, cerr := collector.DiscoverContainersWithTimeout(60 * time.Second)
+		if cerr != nil {
+			log.Printf("Error discovering containers: %v", cerr)
+		} else if len(containers) > 0 {
+			if err := client.SendContainerInventory(containers); err != nil {
+				log.Printf("Error sending container inventory: %v", err)
+			} else {
+				log.Printf("Sent initial container inventory: %d containers", len(containers))
+			}
+		}
 	}()
 
 	log.Printf("Agent started. Server: %s (ID: %s)", cfg.ServerURL, cfg.ServerID)
@@ -137,6 +148,22 @@ func Run(configPath string) error {
 			if err := client.SendInventory(inv); err != nil {
 				log.Printf("Error sending inventory: %v", err)
 			}
+			// Container discovery pe fiecare inventory tick (goroutine separata)
+			go func() {
+				containers, cerr := collector.DiscoverContainersWithTimeout(60 * time.Second)
+				if cerr != nil {
+					log.Printf("Container discovery error: %v", cerr)
+					return
+				}
+				if len(containers) == 0 {
+					return
+				}
+				if err := client.SendContainerInventory(containers); err != nil {
+					log.Printf("Error sending container inventory: %v", err)
+				} else {
+					log.Printf("Container inventory updated: %d containers", len(containers))
+				}
+			}()
 
 		case <-auditTicker.C:
 			// Verificare audituri in asteptare

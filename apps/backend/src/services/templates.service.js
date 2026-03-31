@@ -115,6 +115,7 @@ async function importJson(jsonData, userId, isBuiltIn = false) {
                                     normalize: check.normalize || [],
                                     onFailMessage: check.onFailMessage,
                                     platformScope: check.platformScope || [],
+                                    targetScope: check.targetScope || 'HOST',
                                 })),
                             },
                             manualChecks: {
@@ -600,6 +601,7 @@ function mapTemplateType(type) {
         NIST: 'NIST',
         MITRE: 'MITRE',
         SUPPLY_CHAIN: 'SUPPLY_CHAIN',
+        CONTAINER_SECURITY: 'CONTAINER_SECURITY',
         ISO27001: 'ISO27001',
         GDPR: 'GDPR',
         PCI_DSS: 'PCI_DSS',

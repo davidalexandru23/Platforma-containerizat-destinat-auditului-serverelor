@@ -297,6 +297,17 @@ async function submitInventory(serverId, data, agentToken) {
 }
 
 /**
+ * Procesare inventar containere trimis de agent.
+ */
+async function submitContainerInventory(serverId, containers, agentToken) {
+    await verifyAgentToken(serverId, agentToken);
+    const containersService = await import('./containers.service.js');
+    const result = await containersService.submitContainerInventory(serverId, containers);
+    log.agent(serverId, 'containers', `${result.count} containere actualizate`);
+    return result;
+}
+
+/**
  * Procesare rezultate verificari trimise de agent.
  */
 async function submitCheckResults(serverId, auditRunId, data, agentToken) {
@@ -459,29 +470,53 @@ async function getPendingAuditChecks(serverId, agentToken) {
 
         console.log(`AuditRun ${run.id}: Found ${run.checkResults.length} completed checks in DB.`);
 
+        // Determinare context container pentru audit
+        const isContainerAudit = run.targetType === 'CONTAINER';
+        const containerNativeId = run.targetContainerNativeId || run.targetContainerId;
+        const runtime = run.targetRuntime || 'docker';
+
         return run.templateVersion.controls
             .filter(c => !excludedIds.includes(c.controlId))
             .flatMap(control =>
                 control.automatedChecks
-                    .filter(check => !completedCheckIds.has(check.id))
+                    .filter(check => {
+                        if (completedCheckIds.has(check.id)) return false;
+                        // Filtrare dupa scope
+                        if (isContainerAudit) return check.targetScope === 'CONTAINER';
+                        return check.targetScope !== 'CONTAINER';
+                    })
                     .map(check => {
-                        // Semnare: command + checkId (sincronizat cu agentul)
-                        const signature = pkiService.signCommand((check.command || '') + check.checkId);
+                        // Inlocuire placeholdere pentru auditul de container
+                        let command = check.command || '';
+                        let script = check.script || '';
+                        if (isContainerAudit && containerNativeId) {
+                            command = command
+                                .replace(/\{\{CONTAINER_ID\}\}/g, containerNativeId)
+                                .replace(/\{\{RUNTIME\}\}/g, runtime);
+                            script = script
+                                .replace(/\{\{CONTAINER_ID\}\}/g, containerNativeId)
+                                .replace(/\{\{RUNTIME\}\}/g, runtime);
+                        }
+
+                        const signature = pkiService.signCommand((command || '') + check.checkId);
                         return {
                             auditRunId: run.id,
                             automatedCheckId: check.id,
                             checkId: check.checkId,
                             title: check.title,
-                            command: check.command,
-                            signature: signature, // Send signature
-                            script: check.script,
+                            command,
+                            signature,
+                            script,
                             expectedResult: check.expectedResult,
                             checkType: check.checkType || 'COMMAND',
                             comparison: check.comparison,
                             parser: check.parser,
                             normalize: check.normalize,
                             onFailMessage: check.onFailMessage,
-                            platformScope: check.platformScope
+                            platformScope: check.platformScope,
+                            targetScope: check.targetScope || 'HOST',
+                            containerId: isContainerAudit ? containerNativeId : null,
+                            runtime: isContainerAudit ? runtime : null,
                         };
                     })
             );
@@ -577,6 +612,7 @@ export {
     enroll,
     submitMetrics,
     submitInventory,
+    submitContainerInventory,
     submitCheckResults,
     getPendingAuditChecks,
     runAdhocCheck,
