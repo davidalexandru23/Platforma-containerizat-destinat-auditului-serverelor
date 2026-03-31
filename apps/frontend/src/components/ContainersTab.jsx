@@ -38,8 +38,8 @@ export default function ContainersTab({ serverId, templates }) {
             setLoading(true);
             setError(null);
             const res = await getContainers(serverId, {
-                filter: filter !== 'ALL' ? filter : undefined,
-                runtime: runtime !== 'ALL' ? runtime : undefined,
+                filter: filter !== 'ALL' ? filter.toLowerCase() : undefined,
+                runtime: runtime !== 'ALL' ? runtime.toLowerCase() : undefined,
                 search: search || undefined
             });
             setContainers(res.data);
@@ -130,7 +130,10 @@ export default function ContainersTab({ serverId, templates }) {
     };
 
     const filterTemplates = () => {
-        return templates.filter(t => t.type === 'CONTAINER_SECURITY');
+        return templates.filter(t => 
+            t.type === 'CONTAINER_SECURITY' || 
+            t.name.toLowerCase().includes('container')
+        );
     };
 
     const StatusBadge = ({ state }) => {
