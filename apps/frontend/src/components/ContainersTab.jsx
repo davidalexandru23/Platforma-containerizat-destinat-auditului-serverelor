@@ -112,7 +112,7 @@ export default function ContainersTab({ serverId, templates }) {
                 targetType: 'CONTAINER',
                 targetContainerId: auditContainer.id,
                 targetRuntime: auditContainer.runtime,
-                targetContainerNativeId: auditContainer.nativeId
+                targetContainerNativeId: auditContainer.containerId
             });
 
             setShowAuditModal(false);
@@ -127,13 +127,6 @@ export default function ContainersTab({ serverId, templates }) {
         } finally {
             setRunningAudit(false);
         }
-    };
-
-    const filterTemplates = () => {
-        return templates.filter(t => 
-            t.type === 'CONTAINER_SECURITY' || 
-            t.name.toLowerCase().includes('container')
-        );
     };
 
     const StatusBadge = ({ state }) => {
@@ -229,7 +222,7 @@ export default function ContainersTab({ serverId, templates }) {
                                             <div className="container-meta">
                                                 <span className="container-runtime">{container.runtime}</span>
                                                 <span className="divider"></span>
-                                                <span className="container-id">ID: {shortenId(container.nativeId)}</span>
+                                                <span className="container-id">ID: {shortenId(container.containerId)}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -334,7 +327,7 @@ export default function ContainersTab({ serverId, templates }) {
                                     <p>{auditError}</p>
                                 </div>
                             )}
-                            <p className="mb-4 text-muted">Alege un template de securitate pentru containere pentru a evalua {shortenId(auditContainer?.nativeId)}.</p>
+                            <p className="mb-4 text-muted">Alege un template de securitate pentru containere pentru a evalua {shortenId(auditContainer?.containerId)}.</p>
                             
                             <div className="form-group">
                                 <label>Template de securitate</label>
@@ -345,7 +338,7 @@ export default function ContainersTab({ serverId, templates }) {
                                     disabled={runningAudit}
                                 >
                                     <option value="">-- Selecteaza un template --</option>
-                                    {filterTemplates().map(t => (
+                                    {templates.map(t => (
                                         <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
                                 </select>
