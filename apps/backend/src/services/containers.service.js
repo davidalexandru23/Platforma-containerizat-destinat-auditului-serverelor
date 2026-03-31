@@ -133,15 +133,16 @@ async function submitContainerInventory(serverId, containers) {
  * Delega catre audit.service.runAudit cu targetType=CONTAINER.
  */
 async function runContainerAudit(data, userId) {
-    const { serverId, templateId, containerId, excludedControlIds } = data;
+    const { serverId, templateId, containerId, targetContainerId, excludedControlIds } = data;
+    const cid = containerId || targetContainerId;
 
-    if (!containerId) {
+    if (!cid) {
         throw new BadRequestError('containerId este obligatoriu pentru auditul de container');
     }
 
     // Verifica existenta containerului
     const container = await prisma.discoveredContainer.findFirst({
-        where: { serverId, id: containerId },
+        where: { serverId, id: cid },
     });
 
     if (!container) {
@@ -154,7 +155,7 @@ async function runContainerAudit(data, userId) {
         templateId,
         excludedControlIds,
         targetType: 'CONTAINER',
-        targetContainerId: containerId,
+        targetContainerId: cid,
         targetRuntime: container.runtime,
         targetContainerNativeId: container.containerId, // docker/podman container id
     }, userId);
