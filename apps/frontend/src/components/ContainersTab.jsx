@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
     getContainers,
     refreshContainers,
@@ -268,6 +269,7 @@ export default function ContainersTab({ serverId, templates }) {
                                                         <th>Status</th>
                                                         <th>Scor</th>
                                                         <th>Data</th>
+                                                        <th>Actiuni</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -285,6 +287,16 @@ export default function ContainersTab({ serverId, templates }) {
                                                                 <span>{audit.automatedCompliancePercent || 0}%</span>
                                                             </td>
                                                             <td>{new Date(audit.createdAt).toLocaleString()}</td>
+                                                            <td>
+                                                                <Link 
+                                                                    to={`/audits/${audit.id}`} 
+                                                                    className="btn btn-secondary btn-sm"
+                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                                                >
+                                                                    <span className="material-symbols-outlined" style={{ fontSize: '14px', marginRight: '0.25rem' }}>visibility</span>
+                                                                    Raport
+                                                                </Link>
+                                                            </td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
