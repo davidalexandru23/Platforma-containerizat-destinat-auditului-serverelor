@@ -1,4 +1,5 @@
 {
+    "$schema": "bittrail-template@1.0",
     "metadata": {
         "name": "Container Runtime Security Baseline (Docker/Podman)",
         "description": "Template de securitate pentru containere Docker si Podman bazat pe CIS Docker Benchmark si bune practici din industrie. Verifica configuratia de securitate a fiecarui container in parte: privilege escalation, namespace sharing, capabilities, filesystem safety, image hygiene si configuratie runtime. Fiecare verificare automata tinteste un container specific folosind {{CONTAINER_ID}} si {{RUNTIME}} injectate de platforma.",
