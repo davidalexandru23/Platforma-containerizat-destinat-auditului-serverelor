@@ -467,7 +467,8 @@ async function getPendingAuditChecks(serverId, agentToken) {
     });
 
     // 1. Obtinere verificari din Rulari Audit DB
-    const dbChecks = auditRuns.flatMap(run => {
+    const dbChecks = [];
+    for (const run of auditRuns) {
         const excludedIds = run.excludedControlIds || [];
         const completedCheckIds = new Set(run.checkResults.map(cr => cr.automatedCheckId));
 
@@ -475,10 +476,23 @@ async function getPendingAuditChecks(serverId, agentToken) {
 
         // Determinare context container pentru audit
         const isContainerAudit = run.targetType === 'CONTAINER';
-        const containerNativeId = run.targetContainerNativeId || run.targetContainerId;
+        let containerNativeId = run.targetContainerNativeId || null;
         const runtime = run.targetRuntime || 'docker';
 
-        return run.templateVersion.controls
+        // Fallback: look up native container ID from DiscoveredContainer if not stored on AuditRun
+        if (isContainerAudit && !containerNativeId && run.targetContainerId) {
+            try {
+                const dc = await prisma.discoveredContainer.findUnique({
+                    where: { id: run.targetContainerId },
+                    select: { containerId: true },
+                });
+                if (dc) containerNativeId = dc.containerId;
+            } catch (err) {
+                console.error(`Failed to resolve native container ID for audit ${run.id}:`, err.message);
+            }
+        }
+
+        const runChecks = run.templateVersion.controls
             .filter(c => !excludedIds.includes(c.controlId))
             .flatMap(control =>
                 control.automatedChecks
@@ -523,7 +537,8 @@ async function getPendingAuditChecks(serverId, agentToken) {
                         };
                     })
             );
-    });
+        dbChecks.push(...runChecks);
+    }
 
     // 2. injectie verificari ad-hoc
     const adhocChecks = adhocQueue.get(serverId) || [];

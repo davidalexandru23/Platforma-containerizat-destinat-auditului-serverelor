@@ -124,6 +124,7 @@ async function runAudit(data, userId) {
             excludedControlIds: excludedControlIds || [],
             targetType: targetType,
             targetContainerId: targetContainerId || null,
+            targetContainerNativeId: targetContainerNativeId || null,
             targetRuntime: targetRuntime || null,
         },
     });
@@ -458,7 +459,7 @@ async function cleanupStaleAudits() {
             data: {
                 status: 'FAILED',
                 completedAt: new Date(),
-                score: 0 // Penalizare
+                automatedCompliancePercent: 0
             }
         });
 
@@ -476,7 +477,7 @@ async function cleanupStaleAudits() {
         console.log(`[CLEANUP] Audit ${audit.id.substring(0, 8)} marcat FAILED (agent offline/timeout)`);
     }
 
-    return staleAudits.length;
+    return stuckAudits.length;
 }
 
 export {

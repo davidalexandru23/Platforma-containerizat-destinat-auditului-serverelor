@@ -338,10 +338,17 @@ export default function ContainersTab({ serverId, templates }) {
                                     disabled={runningAudit}
                                 >
                                     <option value="">-- Selecteaza un template --</option>
-                                    {templates.map(t => (
+                                    {templates
+                                        .filter(t => t.type === 'CONTAINER_SECURITY')
+                                        .map(t => (
                                         <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
                                 </select>
+                                {templates.filter(t => t.type === 'CONTAINER_SECURITY').length === 0 && (
+                                    <p className="text-muted mt-2" style={{fontSize: '0.85rem', color: '#e74c3c'}}>
+                                        Nu exista template-uri de tip Container Security. Importati un template CONTAINER_SECURITY.
+                                    </p>
+                                )}
                             </div>
                         </div>
                         <div className="modal-footer">

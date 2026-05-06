@@ -230,6 +230,7 @@ model AuditRun {
   // Container audit extensions (nullable for backward compatibility)
   targetType                 AuditTargetType   @default(SERVER)
   targetContainerId          String?           // DiscoveredContainer.id when targetType=CONTAINER
+  targetContainerNativeId    String?           // actual docker/podman container id (e.g. d3be225e2ce5)
   targetRuntime              String?           // docker | podman
   checkResults               CheckResult[]
   manualTaskResults          ManualTaskResult[]
