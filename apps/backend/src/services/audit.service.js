@@ -115,19 +115,21 @@ async function runAudit(data, userId) {
     const templateVersion = await templatesService.getActiveVersion(templateId);
 
     // Initializare intrare audit in baza de date (status IN ASTEPTARE)
-    const auditRun = await prisma.auditRun.create({
-        data: {
-            serverId,
-            templateVersionId: templateVersion.id,
-            status: 'PENDING',
-            triggeredBy: userId,
-            excludedControlIds: excludedControlIds || [],
-            targetType: targetType,
-            targetContainerId: targetContainerId || null,
-            targetContainerNativeId: targetContainerNativeId || null,
-            targetRuntime: targetRuntime || null,
-        },
-    });
+    const auditRunData = {
+        serverId,
+        templateVersionId: templateVersion.id,
+        status: 'PENDING',
+        triggeredBy: userId,
+        excludedControlIds: excludedControlIds || [],
+        targetType: targetType,
+        targetContainerId: targetContainerId || null,
+        targetRuntime: targetRuntime || null,
+    };
+    // Include targetContainerNativeId only if present (column may not exist in older schemas)
+    if (targetContainerNativeId) {
+        auditRunData.targetContainerNativeId = targetContainerNativeId;
+    }
+    const auditRun = await prisma.auditRun.create({ data: auditRunData });
 
     // Filtrare verificari in functie de targetType
     // SERVER: doar HOST-scoped checks (si fara scope, pentru compat)

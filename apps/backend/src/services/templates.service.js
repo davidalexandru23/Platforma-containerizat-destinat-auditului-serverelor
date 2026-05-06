@@ -179,11 +179,16 @@ async function importOrUpdatePredefinedTemplate(jsonData) {
         return result;
     }
 
-    // Asigurare ca este marcat ca built-in
-    if (!existingTemplate.isBuiltIn) {
+    // Actualizare campuri de baza template (type, description, isBuiltIn)
+    const newType = mapTemplateType(metadata.type);
+    if (!existingTemplate.isBuiltIn || existingTemplate.type !== newType || existingTemplate.description !== metadata.description) {
         await prisma.template.update({
             where: { id: existingTemplate.id },
-            data: { isBuiltIn: true }
+            data: { 
+                isBuiltIn: true,
+                type: newType,
+                description: metadata.description
+            }
         });
     }
 
