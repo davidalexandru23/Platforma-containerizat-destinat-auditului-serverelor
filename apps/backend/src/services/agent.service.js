@@ -423,9 +423,12 @@ async function submitCheckResults(serverId, auditRunId, data, agentToken) {
                 where: { auditRunId }
             });
 
+            const isContainerAudit = auditRun.targetType === 'CONTAINER';
             const totalAutomatedChecks = auditRun.templateVersion.controls
                 .filter(c => !auditRun.excludedControlIds.includes(c.controlId))
-                .reduce((sum, c) => sum + c.automatedChecks.length, 0);
+                .reduce((sum, c) => sum + c.automatedChecks.filter(ch =>
+                    isContainerAudit ? ch.targetScope === 'CONTAINER' : ch.targetScope !== 'CONTAINER'
+                ).length, 0);
 
             if (count >= totalAutomatedChecks) {
                 console.log(`All checks completed for audit ${auditRunId}. Triggering completion.`);

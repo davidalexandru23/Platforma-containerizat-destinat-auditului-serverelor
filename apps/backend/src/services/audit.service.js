@@ -233,7 +233,10 @@ async function getProgress(id) {
         c => !excludedIds.includes(c.controlId)
     );
 
-    const totalAutomated = activeControls.reduce((sum, c) => sum + c.automatedChecks.length, 0);
+    const isContainerAudit = auditRun.targetType === 'CONTAINER';
+    const totalAutomated = activeControls.reduce((sum, c) => sum + c.automatedChecks.filter(ch =>
+        isContainerAudit ? ch.targetScope === 'CONTAINER' : ch.targetScope !== 'CONTAINER'
+    ).length, 0);
     const totalManual = activeControls.reduce((sum, c) => sum + c.manualChecks.length, 0);
     const completedAutomated = auditRun.checkResults.length;
     const completedManual = auditRun.manualTaskResults.filter(

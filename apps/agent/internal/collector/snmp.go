@@ -9,7 +9,7 @@ import (
 	g "github.com/gosnmp/gosnmp"
 )
 
-// OID-uri enterprise private BitTrail (sub 1.3.6.1.4.1.99999)
+// OID-uri 
 const (
 	OIDBase           = "1.3.6.1.4.1.99999"
 	OIDCpuPercent     = OIDBase + ".1"  // Gauge32 - CPU % agregat
@@ -30,7 +30,7 @@ const (
 	OIDTrapEnterprise = OIDBase + ".0.1" // Trap metrici
 )
 
-// SNMPSender - trimite trap-uri SNMP cu metrici catre backend
+// SNMPSender 
 type SNMPSender struct {
 	target    string // Host backend
 	port      uint16 // Port SNMP trap
@@ -62,7 +62,7 @@ type DetailedMetrics struct {
 	TopProcessesDetailed []ProcessInfo      `json:"topProcessesDetailed"`
 }
 
-// SendMetricsTrap - trimite metrici ca SNMP trap UDP
+//  trimite metrici ca SNMP trap UDP
 func (s *SNMPSender) SendMetricsTrap(metrics *Metrics, detailed *DetailedMetrics) error {
 	// Configurare conexiune SNMP
 	snmp := &g.GoSNMP{
@@ -80,7 +80,7 @@ func (s *SNMPSender) SendMetricsTrap(metrics *Metrics, detailed *DetailedMetrics
 	}
 	defer snmp.Conn.Close()
 
-	// Serializare metrici detaliate ca JSON
+	// Serializare metrici  JSON
 	detailedJSON, err := json.Marshal(detailed)
 	if err != nil {
 		return fmt.Errorf("eroare serializare metrici detaliate: %w", err)
