@@ -173,6 +173,18 @@ server.listen(PORT, async () => {
             log.error('Eroare job verificare offline:', err.message);
         }
     }, 60 * 1000);
+
+    // Curatare metrici istorice (la fiecare ora, default: sterge mai vechi de 30 zile)
+    setInterval(async () => {
+        try {
+            const count = await serversService.cleanupOldMetrics(30);
+            if (count > 0) {
+                log.info(`[CURATARE] Stergere ${count} metrici istorice vechi`);
+            }
+        } catch (err) {
+            log.error('Eroare job curatare metrici:', err.message);
+        }
+    }, 60 * 60 * 1000);
 });
 
 // Oprire controlata

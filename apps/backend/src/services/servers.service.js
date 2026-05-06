@@ -193,6 +193,32 @@ async function getLatestMetrics(serverId) {
     });
 }
 
+async function getMetricsHistory(serverId, hours = 24) {
+    const timeAgo = new Date();
+    timeAgo.setHours(timeAgo.getHours() - hours);
+
+    return prisma.metricSample.findMany({
+        where: {
+            serverId,
+            createdAt: { gte: timeAgo },
+        },
+        orderBy: { createdAt: 'asc' },
+    });
+}
+
+async function cleanupOldMetrics(days = 30) {
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() - days);
+
+    const result = await prisma.metricSample.deleteMany({
+        where: {
+            createdAt: { lt: threshold },
+        },
+    });
+
+    return result.count;
+}
+
 async function getLatestInventory(serverId) {
     return prisma.inventorySnapshot.findFirst({
         where: { serverId },
@@ -260,6 +286,8 @@ export {
     revokePermission,
     getPermissions,
     getLatestMetrics,
+    getMetricsHistory,
+    cleanupOldMetrics,
     getLatestInventory,
     checkAccess,
     checkOfflineServers,

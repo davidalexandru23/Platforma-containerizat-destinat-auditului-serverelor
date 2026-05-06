@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import api from '../api/client';
+import { serversApi } from '../api/servers';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import './ServerDetail.css';
 import ShareServerModal from '../components/ShareServerModal';
 import ContainersTab from '../components/ContainersTab';
@@ -29,6 +31,9 @@ function ServerDetail() {
     // Stare metrici detaliate live (SNMP)
     const [detailedMetrics, setDetailedMetrics] = useState(null);
     const [lastMetricsUpdate, setLastMetricsUpdate] = useState(null);
+
+    // Stare grafice istoric
+    const [metricsHistory, setMetricsHistory] = useState([]);
 
     useEffect(() => {
         loadServer();
@@ -61,6 +66,26 @@ function ServerDetail() {
                     metrics: { ...(prev.metrics || {}), ...data }
                 };
             });
+            
+            // Format data for chart
+            const newPoint = {
+                createdAt: new Date().toISOString(),
+                cpuPercent: data.cpuPercent || data.cpu || 0,
+                memUsedGB: Number(data.memUsedBytes || data.mem?.used || 0) / 1024 / 1024 / 1024,
+                memTotalGB: Number(data.memTotalBytes || data.mem?.total || 1) / 1024 / 1024 / 1024,
+                netInMB: Number(data.netInBytes || data.net?.in || 0) / 1024 / 1024,
+                netOutMB: Number(data.netOutBytes || data.net?.out || 0) / 1024 / 1024,
+            };
+
+            setMetricsHistory(prev => {
+                const updated = [...prev, newPoint];
+                // Keep last 100 points maximum for live updates if we don't have history
+                if (updated.length > 200) {
+                    return updated.slice(updated.length - 200);
+                }
+                return updated;
+            });
+
             setLastMetricsUpdate(new Date());
         });
 
@@ -135,12 +160,24 @@ function ServerDetail() {
     const loadServer = async () => {
         try {
             // Preluare date server
-            const [serverRes, metricsRes, inventoryRes, tokenRes] = await Promise.all([
+            const [serverRes, metricsRes, inventoryRes, tokenRes, historyRes] = await Promise.all([
                 api.get(`/servers/${id}`),
                 api.get(`/servers/${id}/metrics/latest`),
                 api.get(`/servers/${id}/inventory/latest`),
-                api.get(`/servers/${id}/enrollToken`).catch(() => ({ data: { enrollToken: null } }))
+                api.get(`/servers/${id}/enrollToken`).catch(() => ({ data: { enrollToken: null } })),
+                serversApi.getMetricsHistory(id, 24).catch(() => []) // Fetch last 24h
             ]);
+
+            const formattedHistory = historyRes.map(m => ({
+                createdAt: m.createdAt,
+                cpuPercent: m.cpuPercent,
+                memUsedGB: Number(m.memUsedBytes || 0) / 1024 / 1024 / 1024,
+                memTotalGB: Number(m.memTotalBytes || 1) / 1024 / 1024 / 1024,
+                netInMB: Number(m.netInBytes || 0) / 1024 / 1024,
+                netOutMB: Number(m.netOutBytes || 0) / 1024 / 1024,
+            }));
+
+            setMetricsHistory(formattedHistory);
 
             setServer({
                 ...serverRes.data,
@@ -463,8 +500,7 @@ bittrail-agent version`;
                         {isActive && (
                             <div className="live-metrics-header">
                                 <div className="live-indicator">
-                                    <div className="live-pulse"></div>
-                                    <span>Metrici Live</span>
+                                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>Istoric Metrici (ultimele 24h)</span>
                                     {detailedMetrics?.source === 'snmp' && (
                                         <span className="badge badge-neutral" style={{ fontSize: '0.65rem', marginLeft: '0.5rem' }}>SNMP</span>
                                     )}
@@ -480,160 +516,104 @@ bittrail-agent version`;
                         {/* Dashboard metrici detaliate */}
                         {isActive && (
                             <>
-                                {/* Rand 1: CPU + Memorie + Load Average */}
-                                <div className="metrics-grid-detailed">
-                                    {/* CPU Section */}
-                                    <div className="metric-card-detailed">
+                                {/* Rand 1: CPU, Memorie si Retea Istoric */}
+                                <div className="metrics-grid-detailed" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+                                    
+                                    {/* CPU History Chart */}
+                                    <div className="metric-card-detailed full-width">
                                         <div className="metric-card-title">
                                             <span className="material-symbols-outlined">memory</span>
-                                            CPU
+                                            Utilizare CPU (%)
                                         </div>
-                                        <div className="cpu-main">
-                                            <div className="cpu-gauge">
-                                                <svg viewBox="0 0 120 120" className="gauge-svg">
-                                                    <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" strokeWidth="8" />
-                                                    <circle cx="60" cy="60" r="54" fill="none" stroke="var(--primary)" strokeWidth="8"
-                                                        strokeDasharray={`${(server.metrics?.cpuPercent || server.metrics?.cpu || 0) / 100 * 339.3} 339.3`}
-                                                        strokeLinecap="round"
-                                                        transform="rotate(-90 60 60)"
-                                                        className="gauge-progress"
+                                        <div style={{ width: '100%', height: '300px', marginTop: '1rem' }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={metricsHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                    <defs>
+                                                        <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.8}/>
+                                                            <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <XAxis 
+                                                        dataKey="createdAt" 
+                                                        tickFormatter={(tick) => new Date(tick).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })} 
+                                                        minTickGap={30}
+                                                        tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
                                                     />
-                                                    <text x="60" y="55" textAnchor="middle" className="gauge-text">
-                                                        {(server.metrics?.cpuPercent || server.metrics?.cpu || 0).toFixed(1)}%
-                                                    </text>
-                                                    <text x="60" y="72" textAnchor="middle" className="gauge-label">
-                                                        {detailedMetrics?.cpuCount || '-'} cores
-                                                    </text>
-                                                </svg>
-                                            </div>
-                                            {/* Per-core bars */}
-                                            {detailedMetrics?.cpuPerCore && detailedMetrics.cpuPerCore.length > 0 && (
-                                                <div className="cpu-cores">
-                                                    {detailedMetrics.cpuPerCore.map((core, idx) => (
-                                                        <div key={idx} className="core-bar-row">
-                                                            <span className="core-label">C{idx}</span>
-                                                            <div className="core-bar-track">
-                                                                <div className="core-bar-fill" style={{
-                                                                    width: `${core}%`,
-                                                                    backgroundColor: core > 90 ? 'var(--danger)' : core > 70 ? 'var(--warning)' : 'var(--primary)'
-                                                                }}></div>
-                                                            </div>
-                                                            <span className="core-value">{core.toFixed(0)}%</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
+                                                    <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                                    <Tooltip 
+                                                        labelFormatter={(label) => new Date(label).toLocaleString('ro-RO')}
+                                                        formatter={(value) => [`${Number(value).toFixed(1)}%`, 'CPU']}
+                                                        contentStyle={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', borderRadius: '8px' }}
+                                                    />
+                                                    <Area type="monotone" dataKey="cpuPercent" stroke="var(--primary)" fillOpacity={1} fill="url(#colorCpu)" isAnimationActive={false} />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
                                         </div>
                                     </div>
 
-                                    {/* Memorie Section */}
-                                    <div className="metric-card-detailed">
+                                    {/* Memory History Chart */}
+                                    <div className="metric-card-detailed full-width">
                                         <div className="metric-card-title">
                                             <span className="material-symbols-outlined">storage</span>
-                                            Memorie
+                                            Utilizare Memorie (GB)
                                         </div>
-                                        <div className="mem-main">
-                                            <div className="mem-stats">
-                                                <div className="mem-stat-row">
-                                                    <span className="mem-stat-label">Folosita</span>
-                                                    <span className="mem-stat-value">
-                                                        {((server.metrics?.mem?.used || server.metrics?.memUsedBytes || 0) / 1024 / 1024 / 1024).toFixed(2)} GB
-                                                    </span>
-                                                </div>
-                                                <div className="mem-stat-row">
-                                                    <span className="mem-stat-label">Total</span>
-                                                    <span className="mem-stat-value">
-                                                        {((server.metrics?.mem?.total || server.metrics?.memTotalBytes || 1) / 1024 / 1024 / 1024).toFixed(2)} GB
-                                                    </span>
-                                                </div>
-                                                {detailedMetrics?.mem && (
-                                                    <>
-                                                        <div className="mem-stat-row">
-                                                            <span className="mem-stat-label">Disponibila</span>
-                                                            <span className="mem-stat-value">{(detailedMetrics.mem.available / 1024 / 1024 / 1024).toFixed(2)} GB</span>
-                                                        </div>
-                                                        <div className="mem-stat-row">
-                                                            <span className="mem-stat-label">Cache</span>
-                                                            <span className="mem-stat-value">{(detailedMetrics.mem.cached / 1024 / 1024 / 1024).toFixed(2)} GB</span>
-                                                        </div>
-                                                        <div className="mem-stat-row">
-                                                            <span className="mem-stat-label">Buffers</span>
-                                                            <span className="mem-stat-value">{(detailedMetrics.mem.buffers / 1024 / 1024 / 1024).toFixed(2)} GB</span>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-                                            <div className="mem-bar-container">
-                                                <div className="mem-bar-label">RAM</div>
-                                                <div className="progress" style={{ height: '12px', borderRadius: '6px' }}>
-                                                    <div className="progress-bar progress-bar-warning" style={{
-                                                        width: `${(Number(server.metrics?.mem?.used || server.metrics?.memUsedBytes || 0) / Number(server.metrics?.mem?.total || server.metrics?.memTotalBytes || 1)) * 100}%`,
-                                                        transition: 'width 0.5s ease'
-                                                    }}></div>
-                                                </div>
-                                                <span className="mem-bar-pct">
-                                                    {((Number(server.metrics?.mem?.used || server.metrics?.memUsedBytes || 0) / Number(server.metrics?.mem?.total || server.metrics?.memTotalBytes || 1)) * 100).toFixed(1)}%
-                                                </span>
-                                            </div>
-                                            {/* Swap */}
-                                            {detailedMetrics?.swap && detailedMetrics.swap.total > 0 && (
-                                                <div className="mem-bar-container">
-                                                    <div className="mem-bar-label">Swap</div>
-                                                    <div className="progress" style={{ height: '8px', borderRadius: '4px' }}>
-                                                        <div className="progress-bar progress-bar-danger" style={{
-                                                            width: `${detailedMetrics.swap.percent}%`,
-                                                            transition: 'width 0.5s ease'
-                                                        }}></div>
-                                                    </div>
-                                                    <span className="mem-bar-pct">
-                                                        {(detailedMetrics.swap.used / 1024 / 1024).toFixed(0)} MB
-                                                    </span>
-                                                </div>
-                                            )}
+                                        <div style={{ width: '100%', height: '300px', marginTop: '1rem' }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={metricsHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                    <defs>
+                                                        <linearGradient id="colorMem" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="var(--warning)" stopOpacity={0.8}/>
+                                                            <stop offset="95%" stopColor="var(--warning)" stopOpacity={0}/>
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <XAxis 
+                                                        dataKey="createdAt" 
+                                                        tickFormatter={(tick) => new Date(tick).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })} 
+                                                        minTickGap={30}
+                                                        tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
+                                                    />
+                                                    <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                                    <Tooltip 
+                                                        labelFormatter={(label) => new Date(label).toLocaleString('ro-RO')}
+                                                        formatter={(value) => [`${Number(value).toFixed(2)} GB`, 'Memorie']}
+                                                        contentStyle={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', borderRadius: '8px' }}
+                                                    />
+                                                    <Area type="monotone" dataKey="memUsedGB" stroke="var(--warning)" fillOpacity={1} fill="url(#colorMem)" isAnimationActive={false} />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
                                         </div>
                                     </div>
 
-                                    {/* Load Average */}
-                                    <div className="metric-card-detailed metric-card-compact">
+                                    {/* Network History Chart */}
+                                    <div className="metric-card-detailed full-width">
                                         <div className="metric-card-title">
-                                            <span className="material-symbols-outlined">speed</span>
-                                            Load Average
-                                        </div>
-                                        <div className="load-avg-grid">
-                                            <div className="load-avg-item">
-                                                <span className="load-avg-period">1 min</span>
-                                                <span className="load-avg-value">{(server.metrics?.load?.avg1 || server.metrics?.loadAvg1 || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div className="load-avg-item">
-                                                <span className="load-avg-period">5 min</span>
-                                                <span className="load-avg-value">{(server.metrics?.load?.avg5 || server.metrics?.loadAvg5 || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div className="load-avg-item">
-                                                <span className="load-avg-period">15 min</span>
-                                                <span className="load-avg-value">{(server.metrics?.load?.avg15 || server.metrics?.loadAvg15 || 0).toFixed(2)}</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Network summary */}
-                                        <div className="metric-card-title" style={{ marginTop: '1.5rem' }}>
                                             <span className="material-symbols-outlined">lan</span>
-                                            Retea (Total)
+                                            Trafic Retea (MB/s)
                                         </div>
-                                        <div className="net-summary">
-                                            <div className="net-summary-item">
-                                                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--success)' }}>arrow_downward</span>
-                                                <span className="net-direction">In</span>
-                                                <span className="net-value">
-                                                    {((server.metrics?.net?.in || server.metrics?.netInBytes || 0) / 1024 / 1024).toFixed(1)} MB
-                                                </span>
-                                            </div>
-                                            <div className="net-summary-item">
-                                                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--primary)' }}>arrow_upward</span>
-                                                <span className="net-direction">Out</span>
-                                                <span className="net-value">
-                                                    {((server.metrics?.net?.out || server.metrics?.netOutBytes || 0) / 1024 / 1024).toFixed(1)} MB
-                                                </span>
-                                            </div>
+                                        <div style={{ width: '100%', height: '300px', marginTop: '1rem' }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={metricsHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                    <XAxis 
+                                                        dataKey="createdAt" 
+                                                        tickFormatter={(tick) => new Date(tick).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })} 
+                                                        minTickGap={30}
+                                                        tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
+                                                    />
+                                                    <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                                                    <Tooltip 
+                                                        labelFormatter={(label) => new Date(label).toLocaleString('ro-RO')}
+                                                        formatter={(value, name) => [`${Number(value).toFixed(2)} MB/s`, name === 'netInMB' ? 'In' : 'Out']}
+                                                        contentStyle={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', borderRadius: '8px' }}
+                                                    />
+                                                    <Legend />
+                                                    <Area type="monotone" dataKey="netInMB" name="In (MB/s)" stroke="var(--success)" fill="var(--success)" fillOpacity={0.3} isAnimationActive={false} />
+                                                    <Area type="monotone" dataKey="netOutMB" name="Out (MB/s)" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.3} isAnimationActive={false} />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
                                         </div>
                                     </div>
                                 </div>

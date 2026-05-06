@@ -40,4 +40,9 @@ export const serversApi = {
         const response = await client.get(`/servers/${id}/inventory/latest`);
         return response.data;
     },
+
+    getMetricsHistory: async (id, hours = 24) => {
+        const response = await client.get(`/servers/${id}/metrics/history?hours=${hours}`);
+        return response.data;
+    },
 };

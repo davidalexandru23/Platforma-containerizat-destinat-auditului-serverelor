@@ -277,6 +277,27 @@ router.get('/:id/metrics/latest',
 
 /**
  * @swagger
+ * /servers/{id}/metrics/history:
+ *   get:
+ *     tags: [Servers]
+ *     summary: Istoric metrici pentru server
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get('/:id/metrics/history',
+    authenticate,
+    async (req, res, next) => {
+        try {
+            const hours = parseInt(req.query.hours || '24', 10);
+            const metrics = await serversService.getMetricsHistory(req.params.id, hours);
+            res.json(metrics);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+/**
+ * @swagger
  * /servers/{id}/inventory/latest:
  *   get:
  *     tags: [Servers]
