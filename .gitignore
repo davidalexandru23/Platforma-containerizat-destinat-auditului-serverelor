@@ -58,3 +58,13 @@ prisma/*.db-journal
 
 # Debug
 .pnpm-debug.log*
+
+# Word temp files
+~$*
+
+# Agent compiled binaries (use build/ dir instead)
+apps/agent/agent
+apps/agent/bittrail-agent
+
+# Old template backups
+backup_template*/

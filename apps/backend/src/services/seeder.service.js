@@ -18,7 +18,6 @@ async function seedTemplates() {
         for (const pt of predefinedTemplates) {
             try {
                 // Import sau Update (verificare versiune)
-                console.log(`[SEEDER_DEBUG] Processing template: "${pt.name}" | File Version: ${pt.version}`);
                 const content = await templatesService.getPredefinedTemplateContent(pt.filename);
                 const result = await templatesService.importOrUpdatePredefinedTemplate(content);
 
@@ -33,7 +32,6 @@ async function seedTemplates() {
                 }
 
             } catch (e) {
-                console.error(`[SEEDER_ERROR] Failed to seed template ${pt.filename}:`, e);
                 log.error(`Failed to seed template ${pt.filename}: ${e.message}`);
             }
         }
