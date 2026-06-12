@@ -20,7 +20,7 @@ func Run(configPath string) error {
 		return fmt.Errorf("eroare la incarcarea configuratiei: %w", err)
 	}
 
-	// --- Configurare PKI ---
+	// Configurare PKI (mTLS)
 	var tlsConfig *tls.Config
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
 		fmt.Printf("Loading certificates from:\n  Cert: %s\n  Key:  %s\n", cfg.CertFile, cfg.KeyFile)
@@ -28,7 +28,7 @@ func Run(configPath string) error {
 		if err != nil {
 			log.Printf("WARNING: Failed to load keypair: %v. Running without mTLS.", err)
 		} else {
-			// Configurare TLS custom
+			// Configurare TLS custom cu certificat agent
 			tlsConfig = &tls.Config{
 				Certificates:       []tls.Certificate{cert},
 				InsecureSkipVerify: true, // Dev: cert server self-signed
@@ -39,12 +39,12 @@ func Run(configPath string) error {
 
 	client := api.NewClient(cfg.ServerURL, cfg.ServerID, cfg.AgentToken, tlsConfig)
 
-	// Initializare colectori
+	// Initializare colectori de metrici si inventar
 	metricsCollector := collector.NewMetricsCollector()
 	inventoryCollector := collector.NewInventoryCollector()
 	auditRunner := collector.NewAuditRunner(client, cfg.KeyFile, cfg.BackendKeyFile)
 
-	// --- Initializare SNMP Sender (optional) ---
+	// Initializare SNMP Sender (optional)
 	var snmpSender *collector.SNMPSender
 	if cfg.SNMPEnabled && cfg.SNMPTarget != "" {
 		snmpSender = collector.NewSNMPSender(
@@ -59,11 +59,11 @@ func Run(configPath string) error {
 		log.Println("SNMP Trap dezactivat. Metrici doar prin HTTP POST.")
 	}
 
-	// Canal oprire (graceful shutdown)
+	// Configurare canal oprire (graceful shutdown)
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
 
-	// Tickere job-uri periodice
+	// Configurare tickere job-uri periodice
 	metricsTicker := time.NewTicker(time.Duration(cfg.MetricsInterval) * time.Second)
 	inventoryTicker := time.NewTicker(time.Duration(cfg.InventoryInterval) * time.Second)
 	auditTicker := time.NewTicker(time.Duration(cfg.AuditCheckInterval) * time.Second)
@@ -72,14 +72,14 @@ func Run(configPath string) error {
 	defer inventoryTicker.Stop()
 	defer auditTicker.Stop()
 
-	// Ticker SNMP separat (interval mai scurt, live)
+	// Configurare ticker SNMP separat (interval mai scurt, live)
 	var snmpTicker *time.Ticker
 	if snmpSender != nil {
 		snmpTicker = time.NewTicker(time.Duration(cfg.SNMPInterval) * time.Second)
 		defer snmpTicker.Stop()
 	}
 
-	// Colectare initiala
+	// Executare colectare initiala in background
 	go func() {
 		log.Println("Collecting initial inventory...")
 		if inv, err := inventoryCollector.Collect(); err == nil {
@@ -87,7 +87,7 @@ func Run(configPath string) error {
 				log.Printf("Error sending initial inventory: %v", err)
 			}
 		}
-		// Container discovery initiala
+		// Executare container discovery initiala
 		containers, cerr := collector.DiscoverContainersWithTimeout(60 * time.Second)
 		if cerr != nil {
 			log.Printf("Error discovering containers: %v", cerr)
@@ -102,7 +102,7 @@ func Run(configPath string) error {
 
 	log.Printf("Agent started. Server: %s (ID: %s)", cfg.ServerURL, cfg.ServerID)
 
-	// Canal SNMP (nil-safe — select ignora nil channels)
+	// Initializare canal SNMP (nil-safe - select ignora nil channels)
 	var snmpChan <-chan time.Time
 	if snmpTicker != nil {
 		snmpChan = snmpTicker.C
@@ -111,7 +111,7 @@ func Run(configPath string) error {
 	for {
 		select {
 		case <-metricsTicker.C:
-			// HTTP POST - persistare metrici in baza de date
+			// Trimitere HTTP POST - persistare metrici in baza de date
 			metrics, err := metricsCollector.Collect()
 			if err != nil {
 				log.Printf("Error collecting metrics: %v", err)
@@ -122,7 +122,7 @@ func Run(configPath string) error {
 			}
 
 		case <-snmpChan:
-			// SNMP Trap UDP - trimitere live (fire-and-forget)
+			// Trimitere SNMP Trap UDP - trimitere live (fire-and-forget)
 			metrics, err := metricsCollector.Collect()
 			if err != nil {
 				log.Printf("Error collecting metrics for SNMP: %v", err)
@@ -148,7 +148,7 @@ func Run(configPath string) error {
 			if err := client.SendInventory(inv); err != nil {
 				log.Printf("Error sending inventory: %v", err)
 			}
-			// Container discovery pe fiecare inventory tick (goroutine separata)
+			// Executare container discovery pe fiecare inventory tick (goroutine separata)
 			go func() {
 				containers, cerr := collector.DiscoverContainersWithTimeout(60 * time.Second)
 				if cerr != nil {
@@ -166,7 +166,7 @@ func Run(configPath string) error {
 			}()
 
 		case <-auditTicker.C:
-			// Verificare audituri in asteptare
+			// Verificare si executare audituri in asteptare
 			if err := auditRunner.CheckAndRun(); err != nil {
 				log.Printf("Error running audit checks: %v", err)
 			}
@@ -178,12 +178,12 @@ func Run(configPath string) error {
 	}
 }
 
-// TestCollectors - depanare
+// Testare colectori pentru depanare
 func TestCollectors() error {
 	fmt.Println("=== Test Colectori BitTrail Agent ===")
 	fmt.Println()
 
-	// Test metrici
+	// Testare colectare metrici
 	fmt.Println("--- Metrici ---")
 	mc := collector.NewMetricsCollector()
 	metrics, err := mc.Collect()
@@ -202,7 +202,7 @@ func TestCollectors() error {
 
 	fmt.Println()
 
-	// Test inventar
+	// Testare colectare inventar
 	fmt.Println("--- Inventory ---")
 	ic := collector.NewInventoryCollector()
 	inv, err := ic.Collect()

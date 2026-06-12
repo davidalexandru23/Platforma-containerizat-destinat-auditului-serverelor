@@ -9,7 +9,7 @@ const client = axios.create({
     },
 });
 
-// Interceptor pentru token
+// Definire interceptor pentru token
 client.interceptors.request.use((config) => {
     const token = localStorage.getItem('accessToken');
     if (token) {

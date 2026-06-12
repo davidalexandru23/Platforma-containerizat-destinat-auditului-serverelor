@@ -1,14 +1,14 @@
 import { prisma } from '../lib/prisma.js';
 import * as notificationService from '../services/notification.service.js';
 
-// Middleware logare audit
+// Logare audit actiuni utilizator
 const auditLog = (action, resource) => {
     return async (req, res, next) => {
-        // Salvare send original
+        // Salvare referinta send original
         const originalSend = res.send;
 
         res.send = function (body) {
-            // Logare doar daca request-ul a reusit
+            // Logare actiune doar daca request-ul a reusit
             if (res.statusCode >= 200 && res.statusCode < 400) {
                 logAction(req, action, resource).catch(console.error);
             }
@@ -21,7 +21,7 @@ const auditLog = (action, resource) => {
 
 async function logAction(req, action, resource) {
     try {
-        // Excludere logare date sensibile
+        // Excludere logare date sensibile din payload
         const sensitiveEndpoints = ['/auth/login', '/auth/register', '/auth/refresh', '/users'];
         const isSensitive = sensitiveEndpoints.some(ep => req.originalUrl.includes(ep));
         const resourceId = req.params.id || req.params.serverId || null;
@@ -39,7 +39,7 @@ async function logAction(req, action, resource) {
             },
         });
 
-        // Difuzare catre flux activitate
+        // Difuzare eveniment catre flux activitate WebSocket
         notificationService.broadcastActivity(
             req.user?.role?.name || 'SYSTEM',
             action,

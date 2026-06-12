@@ -18,14 +18,14 @@ export default function ContainersTab({ serverId, templates }) {
     const [containerAudits, setContainerAudits] = useState([]);
     const [loadingAudits, setLoadingAudits] = useState(false);
 
-    // Modal state for running audit
+    // Definire stare modal pentru rulare audit
     const [showAuditModal, setShowAuditModal] = useState(false);
     const [auditContainer, setAuditContainer] = useState(null);
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [runningAudit, setRunningAudit] = useState(false);
     const [auditError, setAuditError] = useState(null);
 
-    // Filter state
+    // Definire stare filtrare
     const [filter, setFilter] = useState('ALL');
     const [runtime, setRuntime] = useState('ALL');
     const [search, setSearch] = useState('');
@@ -51,9 +51,9 @@ export default function ContainersTab({ serverId, templates }) {
         }
     };
 
-    // Reload when filters change
+    // Reincarcare la schimbare filtre
     useEffect(() => {
-        // Debounce search slightly
+        // Aplicare debounce usor pentru cautare
         const timer = setTimeout(() => {
             loadContainers();
         }, 300);
@@ -64,7 +64,7 @@ export default function ContainersTab({ serverId, templates }) {
         try {
             setRefreshing(true);
             await refreshContainers(serverId);
-            // Polling for updates since the refresh is asynchronous (agent sends it later)
+            // Verificare prin polling pentru actualizari, deoarece refresh-ul este asincron (agentul il trimite mai tarziu)
             setTimeout(loadContainers, 2000);
             setTimeout(loadContainers, 5000);
         } catch (err) {
@@ -118,7 +118,7 @@ export default function ContainersTab({ serverId, templates }) {
 
             setShowAuditModal(false);
             
-            // Reload audits if the same container was selected
+            // Reincarcare audituri daca acelasi container a fost selectat
             if (selectedContainer && selectedContainer.id === auditContainer.id) {
                 const res = await getContainerAuditHistory(serverId, auditContainer.id);
                 setContainerAudits(res.data);

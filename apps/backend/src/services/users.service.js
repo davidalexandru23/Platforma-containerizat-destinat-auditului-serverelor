@@ -31,7 +31,7 @@ async function create(userData) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Logica impartire nume in prenume/nume poate fi imbunatatita, aproximativ:
+    // Impartire nume in prenume si nume familie
     const [firstName, ...lastNameParts] = (name || '').split(' ');
     const lastName = lastNameParts.join(' ');
 
@@ -119,14 +119,14 @@ async function changePassword(userId, currentPassword, newPassword) {
         throw new NotFoundError('User nu exista');
     }
 
-    // Verificare parola curenta
+    // Verificare corectitudine parola curenta
     const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
 
     if (!isPasswordValid) {
         throw new UnauthorizedError('Parola curenta incorecta');
     }
 
-    // Hash parola noua
+    // Generare hash pentru parola noua
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
     await prisma.user.update({

@@ -1,15 +1,15 @@
-// Serviciu listener SNMP Trap UDP
-// Primeste trap-uri SNMPv2c de la agenti si le retransmite live via WebSocket
+// Definire serviciu listener SNMP Trap UDP
+// Receptionare trap-uri SNMPv2c de la agenti si retransmitere live via WebSocket
 
 import snmp from 'net-snmp';
 import { log } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import * as notificationService from './notification.service.js';
 
-// Referinta WebSocket (setata din main.js)
+// Pastrare referinta WebSocket (setata din main.js)
 let io = null;
 
-// OID-uri enterprise private BitTrail
+// Definire OID-uri enterprise private BitTrail
 const OID_BASE = '1.3.6.1.4.1.99999';
 const OID_MAP = {
     [`${OID_BASE}.1`]: 'cpuPercent',       // Gauge32 x100
@@ -27,7 +27,7 @@ const OID_MAP = {
     [`${OID_BASE}.13`]: 'timestamp',       // OctetString (ISO8601)
 };
 
-// Praguri alerta (sincronizate cu agent.service.js)
+// Definire praguri alerta (sincronizate cu agent.service.js)
 const ALERT_THRESHOLDS = {
     CPU_HIGH: 90,
     CPU_WARNING: 80,
@@ -47,7 +47,7 @@ function startSNMPListener(socketIO) {
     const port = parseInt(process.env.SNMP_TRAP_PORT) || 11162;
     const community = process.env.SNMP_COMMUNITY || 'bittrail';
 
-    // Optiuni receiver trap
+    // Configurare optiuni receiver trap
     const options = {
         port: port,
         disableAuthorization: false,
@@ -94,7 +94,7 @@ async function handleTrap(notification) {
             }
         }
 
-        // Validare camp obligatoriu - serverID
+        // Validare camp obligatoriu - serverId
         if (!data.serverId) {
             log.warn('[SNMP] Trap fara serverId, ignorat');
             return;
@@ -141,7 +141,7 @@ async function handleTrap(notification) {
 
         // === Difuzare WebSocket live ===
         if (io) {
-            // 1. Metrici agregate (compatibilitate cu frontend-ul existent)
+            // 1. Difuzare metrici agregate (compatibilitate cu frontend-ul existent)
             io.of('/ws/live').to(`server:${serverId}`).emit('server:metrics', {
                 serverId,
                 cpu: cpuPercent,
@@ -151,10 +151,10 @@ async function handleTrap(notification) {
                 load: { avg1: loadAvg1, avg5: loadAvg5, avg15: loadAvg15 },
                 topProcs: detailed?.topProcessesDetailed?.map(p => p.name) || [],
                 timestamp,
-                source: 'snmp', // Indicator sursa (SNMP vs HTTP)
+                source: 'snmp', // Marcare indicator sursa (SNMP vs HTTP)
             });
 
-            // 2. Metrici detaliate (eveniment nou pentru frontend extins)
+            // 2. Difuzare metrici detaliate (eveniment nou pentru frontend extins)
             if (detailed) {
                 io.of('/ws/live').to(`server:${serverId}`).emit('server:metrics:detailed', {
                     serverId,
@@ -186,10 +186,10 @@ async function handleTrap(notification) {
                 });
             }
 
-            // 3. Heartbeat (semnalizare online)
+            // 3. Difuzare heartbeat (semnalizare online)
             notificationService.broadcastHeartbeat(serverId, null, 0);
 
-            // 4. Status server (lista de servere)
+            // 4. Difuzare status server (lista de servere)
             notificationService.broadcastServerStatus(serverId, 'ONLINE', new Date());
 
             // 5. Verificare praguri alerta

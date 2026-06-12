@@ -8,7 +8,7 @@ import { log } from '../lib/logger.js';
 async function register(data) {
     const { email, password, firstName, lastName, role: roleName } = data;
 
-    // Verificare daca email exista
+    // Verificare existenta email
     const existingUser = await prisma.user.findUnique({
         where: { email },
     });
@@ -17,13 +17,13 @@ async function register(data) {
         throw new ConflictError('Email deja inregistrat');
     }
 
-    // Hash parola
+    // Generare hash parola
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Initializare roluri daca nu exista
+    // Initializare roluri implicite daca nu exista
     await seedDefaultRoles();
 
-    // Preluare rol sau implicit VIEWER
+    // Preluare rol solicitat sau implicit VIEWER
     const requestedRoleName = ['ADMIN', 'AUDITOR', 'VIEWER'].includes(roleName) ? roleName : 'VIEWER';
     const userRole = await prisma.role.findUnique({
         where: { name: requestedRoleName },
@@ -33,7 +33,7 @@ async function register(data) {
         throw new Error('Rol inexistent');
     }
 
-    // Creare utilizator
+    // Creare utilizator in baza de date
     const user = await prisma.user.create({
         data: {
             email,
@@ -45,7 +45,7 @@ async function register(data) {
         include: { role: true },
     });
 
-    // Generare token-uri
+    // Generare pereche token-uri (access + refresh)
     const tokens = await generateTokens(user.id, user.email, user.role.name);
 
     log.info(`User registered: ${email} (${user.role.name})`);
@@ -65,7 +65,7 @@ async function register(data) {
 async function login(data) {
     const { email, password, rememberMe } = data;
 
-    // Cautare utilizator
+    // Cautare utilizator dupa email
     const user = await prisma.user.findUnique({
         where: { email },
         include: { role: true },
@@ -75,14 +75,14 @@ async function login(data) {
         throw new UnauthorizedError('Credentiale invalide');
     }
 
-    // Verificare parola
+    // Verificare corectitudine parola
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
         throw new UnauthorizedError('Credentiale invalide');
     }
 
-    // Generare token-uri
+    // Generare pereche token-uri noi
     const tokens = await generateTokens(user.id, user.email, user.role.name, rememberMe);
 
     log.info(`User login: ${email} (RememberMe: ${!!rememberMe})`);
@@ -114,7 +114,7 @@ async function refresh(refreshToken) {
         throw new UnauthorizedError('Refresh token invalid');
     }
 
-    // Verificare expirare
+    // Verificare expirare token
     if (new Date() > storedToken.expiresAt) {
         await prisma.refreshToken.delete({
             where: { id: storedToken.id },
@@ -122,12 +122,12 @@ async function refresh(refreshToken) {
         throw new UnauthorizedError('Refresh token expirat');
     }
 
-    // Stergere vechiul token de reimprospatare
+    // Stergere vechiul token de reimprospatare din baza de date
     await prisma.refreshToken.delete({
         where: { id: storedToken.id },
     });
 
-    // Generare token-uri noi
+    // Generare pereche token-uri noi de acces
     const tokens = await generateTokens(
         storedToken.user.id,
         storedToken.user.email,

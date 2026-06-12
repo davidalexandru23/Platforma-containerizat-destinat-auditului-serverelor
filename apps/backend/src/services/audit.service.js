@@ -7,7 +7,7 @@ import * as notificationService from './notification.service.js';
 import * as scoringService from './scoring.service.js';
 import * as templatesService from './templates.service.js';
 
-// WebSocket - setat din main.js
+// Setare WebSocket din main.js
 let io = null;
 const setIO = (socketIO) => { io = socketIO; };
 
@@ -35,7 +35,7 @@ async function findAll(serverId) {
 
 /**
  * Returnare detalii complete audit, inclusiv rezultatele verificarilor.
- * Folosit in pagina Detalii Audit pentru afisarea progresului.
+ * Folosire in pagina Detalii Audit pentru afisarea progresului.
  * @param {string} id - ID-ul auditului
  */
 async function findById(id) {
@@ -114,7 +114,7 @@ async function runAudit(data, userId) {
     // Determinare cea mai recenta versiune a template-ului
     const templateVersion = await templatesService.getActiveVersion(templateId);
 
-    // Initializare intrare audit in baza de date (status IN ASTEPTARE)
+    // Initializare intrare audit in baza de date (status PENDING)
     const auditRunData = {
         serverId,
         templateVersionId: templateVersion.id,
@@ -132,8 +132,6 @@ async function runAudit(data, userId) {
     const auditRun = await prisma.auditRun.create({ data: auditRunData });
 
     // Filtrare verificari in functie de targetType
-    // SERVER: doar HOST-scoped checks (si fara scope, pentru compat)
-    // CONTAINER: doar CONTAINER-scoped checks
     const filterChecksByScope = (checks) => {
         if (targetType === 'CONTAINER') {
             return checks.filter(ch => ch.targetScope === 'CONTAINER');
@@ -163,7 +161,7 @@ async function runAudit(data, userId) {
 
     console.log(`Reviewing audit plan: found ${totalAutomatedChecks} automated checks and ${manualChecks.length} manual tasks for template v${templateVersion.version}.`);
 
-    // Daca nu exista verificari automate, marcare audit ca finalizat sau in asteptare manuala
+    // Marcare audit ca finalizat sau in asteptare manuala daca nu exista verificari automate
     if (totalAutomatedChecks === 0) {
         if (manualChecks.length === 0) {
             console.log('No checks found in template. Marking audit as auto-completed.');
@@ -188,7 +186,7 @@ async function runAudit(data, userId) {
         }
     }
 
-    // Daca agent este online si exista verificari automate, pornire audit
+    // Pornire audit daca agentul este online si exista verificari automate
     if (server.status === 'ONLINE') {
         await prisma.auditRun.update({
             where: { id: auditRun.id },
@@ -465,7 +463,7 @@ async function cleanupStaleAudits() {
             }
         });
 
-        // Notificare utilizator agent offline
+        // Notificare utilizator pentru agent offline
         notificationService.broadcastAuditStatus(audit.id, 'FAILED', audit.serverId);
 
         // Difuzare activitate pentru feed

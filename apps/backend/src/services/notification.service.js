@@ -1,4 +1,4 @@
-// Serviciu de notificare centralizat pentru difuzari WebSocket
+// Notificare centralizata pentru difuzari WebSocket
 import { log } from '../lib/logger.js';
 
 let io = null;
@@ -7,7 +7,7 @@ const setIO = (socketIO) => {
     io = socketIO;
 };
 
-// Tipuri notificare
+// Definire tipuri notificare
 const NotificationType = {
     AGENT_ENROLLED: 'agent:enrolled',
     AGENT_OFFLINE: 'agent:offline',
@@ -19,7 +19,7 @@ const NotificationType = {
     SERVER_ALERT: 'server:alert',
 };
 
-// Difuzare notificare catre toti utilizatorii conectati
+// Difuzare notificare catre toti utilizatorii conectati via WebSocket
 function notify(data) {
     if (!io) {
         log.warn('Notification service: IO not initialized');
@@ -36,7 +36,7 @@ function notify(data) {
     log.ws('/notifications', 'broadcast', `${data.type}: ${data.title}`);
 }
 
-// Difuzare actualizare status server
+// Difuzare actualizare status server catre frontend
 function broadcastServerStatus(serverId, status, lastSeen, riskLevel = null) {
     if (!io) return;
 
@@ -48,7 +48,7 @@ function broadcastServerStatus(serverId, status, lastSeen, riskLevel = null) {
     });
 }
 
-// Difuzare eveniment activitate
+// Difuzare eveniment activitate catre flux activitate frontend
 function broadcastActivity(actor, action, entity, entityId, details = null) {
     if (!io) return;
 
@@ -62,7 +62,7 @@ function broadcastActivity(actor, action, entity, entityId, details = null) {
     });
 }
 
-// Difuzare alerte server
+// Difuzare alerte server catre camera specifica
 function broadcastServerAlert(serverId, type, message, severity) {
     if (!io) return;
 
@@ -75,7 +75,7 @@ function broadcastServerAlert(serverId, type, message, severity) {
     });
 }
 
-// Difuzare heartbeat
+// Difuzare heartbeat catre camera server
 function broadcastHeartbeat(serverId, agentVersion, latencyMs) {
     if (!io) return;
 
@@ -87,7 +87,7 @@ function broadcastHeartbeat(serverId, agentVersion, latencyMs) {
     });
 }
 
-// Difuzare schimbare status audit (pentru actualizare live in frontend)
+// Difuzare schimbare status audit (actualizare live in frontend)
 function broadcastAuditStatus(auditRunId, status, serverId) {
     if (!io) return;
 

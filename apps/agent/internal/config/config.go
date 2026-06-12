@@ -12,23 +12,23 @@ type Config struct {
 	ServerURL  string `yaml:"server_url"`
 	AgentToken string `yaml:"agent_token"`
 
-	// Intervale colectare
+	// Intervale colectare metrici
 	MetricsInterval    int `yaml:"metrics_interval"`     // secunde
 	InventoryInterval  int `yaml:"inventory_interval"`   // secunde
 	AuditCheckInterval int `yaml:"audit_check_interval"` // secunde
 
-	// Configurare PKI
+	// Configurare fisiere PKI
 	KeyFile        string `yaml:"key_file"`
 	CertFile       string `yaml:"cert_file"`
 	BackendKeyFile string `yaml:"backend_key_file"`
 
-	// Securitate / PKI
+	// Configurare securitate / PKI
 	AgentKeyPath   string `yaml:"agent_key_path"`
 	AgentCertPath  string `yaml:"agent_cert_path"`
 	CACertPath     string `yaml:"ca_cert_path"`
 	BackendPubPath string `yaml:"backend_pub_path"`
 
-	// Configurare SNMP Trap
+	// Configurare SNMP Trap sender
 	SNMPEnabled   bool   `yaml:"snmp_enabled"`   // Activare trimitere trap-uri SNMP
 	SNMPTarget    string `yaml:"snmp_target"`    // Host backend (IP direct, NU prin tunnel)
 	SNMPPort      int    `yaml:"snmp_port"`      // Port UDP trap (implicit 11162)
@@ -47,7 +47,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// Valori implicite
+	// Aplicare valori implicite
 	if cfg.MetricsInterval == 0 {
 		cfg.MetricsInterval = 60 // Persistare DB la 60s (mai rar, SNMP preia live)
 	}
@@ -58,7 +58,7 @@ func Load(path string) (*Config, error) {
 		cfg.AuditCheckInterval = 5
 	}
 
-	// Valori implicite SNMP
+	// Aplicare valori implicite SNMP
 	if cfg.SNMPPort == 0 {
 		cfg.SNMPPort = 11162 // Port non-privilegiat
 	}
@@ -68,14 +68,14 @@ func Load(path string) (*Config, error) {
 	if cfg.SNMPInterval == 0 {
 		cfg.SNMPInterval = 5 // Trap la fiecare 5 secunde (live)
 	}
-	// Daca SNMP target nu e setat, extragere host din server_url
+	// Extragere host din server_url daca SNMP target nu e setat
 	if cfg.SNMPTarget == "" && cfg.ServerURL != "" {
 		if u, err := url.Parse(cfg.ServerURL); err == nil {
 			cfg.SNMPTarget = u.Hostname()
 		}
 	}
 
-	// Valori implicite securitate
+	// Aplicare valori implicite securitate
 	if cfg.AgentKeyPath == "" {
 		cfg.AgentKeyPath = "certs/agent.key"
 	}

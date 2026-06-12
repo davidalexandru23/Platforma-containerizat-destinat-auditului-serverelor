@@ -1,7 +1,7 @@
 // Validare comenzi client-side (feedback instant)
-// Copie simplificata a regulilor din backend - validarea reala ramane server-side
+// Copiere simplificata a regulilor din backend - validarea reala ramane server-side
 
-// Nivel 1: Blacklist - comenzi blocate definitiv
+// Definire Nivel 1: Blacklist - comenzi blocate definitiv
 const DANGEROUS_COMMANDS = [
     { pattern: /\brm\s+(-[a-zA-Z]*\s+)*/, label: 'rm (stergere fisiere)' },
     { pattern: /\brmdir\b/, label: 'rmdir (stergere directoare)' },
@@ -47,7 +47,7 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\bcrontab\s+-(e|r)\b/, label: 'crontab -e/-r (modificare cron)' },
 ];
 
-// Nivel 2: Operatori periculosi
+// Definire Nivel 2: Operatori periculosi
 const DANGEROUS_OPERATORS = [
     { pattern: /[^2]>(?!\/dev\/null)\s*\S/, reason: 'Redirectare output catre fisier' },
     { pattern: />>/, reason: 'Append catre fisier' },
@@ -73,7 +73,7 @@ export function validateCommandFrontend(command) {
 
     const cmd = command.trim();
 
-    // Nivel 1: Blacklist
+    // Verificare Nivel 1: Blacklist
     for (const { pattern, label } of DANGEROUS_COMMANDS) {
         if (pattern.test(cmd)) {
             return {
@@ -84,7 +84,7 @@ export function validateCommandFrontend(command) {
         }
     }
 
-    // Nivel 2: Operatori periculosi
+    // Verificare Nivel 2: Operatori periculosi
     const reasons = [];
     for (const { pattern, reason } of DANGEROUS_OPERATORS) {
         if (pattern.test(cmd)) {

@@ -17,7 +17,7 @@ var (
 	enrollToken string
 )
 
-// Injectare versiune compilare (-ldflags)
+// Injectare versiune la compilare (-ldflags)
 var agentVersion = "dev"
 
 func main() {
@@ -47,7 +47,7 @@ Exemplu utilizare:
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "/etc/bittrail-agent/config.yaml", "fisier configurare")
 
-	// Comanda inrolare
+	// Definire comanda inrolare
 	enrollCmd := &cobra.Command{
 		Use:   "enroll",
 		Short: "Inrolare agent pe server",
@@ -72,7 +72,7 @@ Tokenul expira dupa 24 ore sau dupa prima utilizare.`,
 	enrollCmd.MarkFlagRequired("token")
 	rootCmd.AddCommand(enrollCmd)
 
-	// Comanda rulare
+	// Definire comanda rulare
 	runCmd := &cobra.Command{
 		Use:   "run",
 		Short: "Pornire agent in mod continuu",
@@ -95,7 +95,7 @@ Pentru prod, utilizare serviciu systemd:
 	}
 	rootCmd.AddCommand(runCmd)
 
-	// Comanda status
+	// Definire comanda status
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Afiseaza statusul agentului",
@@ -128,7 +128,7 @@ Pentru prod, utilizare serviciu systemd:
 	}
 	rootCmd.AddCommand(statusCmd)
 
-	// Comanda versiune
+	// Definire comanda versiune
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "Afisare versiune agent",
@@ -138,7 +138,7 @@ Pentru prod, utilizare serviciu systemd:
 	}
 	rootCmd.AddCommand(versionCmd)
 
-	// Comanda testare (debug)
+	// Definire comanda testare (debug)
 	testCmd := &cobra.Command{
 		Use:   "test",
 		Short: "Testare colectare metrici si inventar",

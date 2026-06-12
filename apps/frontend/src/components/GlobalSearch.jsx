@@ -14,7 +14,7 @@ function GlobalSearch() {
     const dropdownRef = useRef(null);
     const navigate = useNavigate();
 
-    // Pagini statice pentru cautare
+    // Definire pagini statice pentru cautare
     const staticPages = [
         { name: 'Dashboard', path: '/', icon: 'dashboard', keywords: ['dashboard', 'acasa', 'home', 'principal'] },
         { name: 'Servere', path: '/servers', icon: 'dns', keywords: ['servere', 'servers', 'noduri', 'masini'] },

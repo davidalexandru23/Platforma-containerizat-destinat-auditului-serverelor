@@ -3,8 +3,8 @@ import { NotFoundError, BadRequestError } from '../middleware/error.middleware.j
 import * as auditService from './audit.service.js';
 
 /**
- * Preia lista containere descoperite pentru un server.
- * Suporta filtrare dupa: running, runtime, cautare (name/image).
+ * Preluare lista containere descoperite pentru un server.
+ * Suportare filtrare dupa: running, runtime, cautare (name/image).
  */
 async function listContainers(serverId, { filter, runtime, search } = {}) {
     const where = { serverId };
@@ -26,7 +26,7 @@ async function listContainers(serverId, { filter, runtime, search } = {}) {
 }
 
 /**
- * Preia detalii container dupa ID intern.
+ * Preluare detalii container dupa ID intern.
  */
 async function getContainer(serverId, id) {
     const container = await prisma.discoveredContainer.findFirst({
@@ -42,7 +42,7 @@ async function getContainer(serverId, id) {
 
 /**
  * Procesare inventar containere trimis de agent.
- * Upsert pe baza (serverId, runtime, containerId).
+ * Executare upsert pe baza (serverId, runtime, containerId).
  */
 async function submitContainerInventory(serverId, containers) {
     if (!Array.isArray(containers)) {
@@ -129,8 +129,8 @@ async function submitContainerInventory(serverId, containers) {
 }
 
 /**
- * Porneste un audit de container.
- * Delega catre audit.service.runAudit cu targetType=CONTAINER.
+ * Pornire audit de container.
+ * Delegare catre audit.service.runAudit cu targetType=CONTAINER.
  */
 async function runContainerAudit(data, userId) {
     const { serverId, templateId, containerId, targetContainerId, excludedControlIds } = data;
@@ -140,7 +140,7 @@ async function runContainerAudit(data, userId) {
         throw new BadRequestError('containerId este obligatoriu pentru auditul de container');
     }
 
-    // Verifica existenta containerului
+    // Verificare existenta container
     const container = await prisma.discoveredContainer.findFirst({
         where: { serverId, id: cid },
     });
@@ -149,7 +149,7 @@ async function runContainerAudit(data, userId) {
         throw new NotFoundError('Container nu a fost gasit pe serverul specificat');
     }
 
-    // Ruleaza auditul cu targetType=CONTAINER
+    // Rulare audit cu targetType=CONTAINER
     return auditService.runAudit({
         serverId,
         templateId,
@@ -157,12 +157,12 @@ async function runContainerAudit(data, userId) {
         targetType: 'CONTAINER',
         targetContainerId: cid,
         targetRuntime: container.runtime,
-        targetContainerNativeId: container.containerId, // docker/podman container id
+        targetContainerNativeId: container.containerId, // Utilizare ID container docker/podman
     }, userId);
 }
 
 /**
- * Preia istoricul auditurilor pentru un container specific.
+ * Preluare istoric audituri pentru un container specific.
  */
 async function getContainerAuditHistory(serverId, containerId) {
     return prisma.auditRun.findMany({

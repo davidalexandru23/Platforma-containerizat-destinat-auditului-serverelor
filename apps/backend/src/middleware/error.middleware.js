@@ -1,8 +1,8 @@
-// Middleware pentru gestionare erori centralizata
+// Gestionare erori centralizata
 const errorHandler = (err, req, res, next) => {
     console.error('Error:', err);
 
-    // Erori de validare
+    // Gestionare erori de validare
     if (err.name === 'ValidationError' || err.type === 'validation') {
         return res.status(400).json({
             error: 'Validation Error',
@@ -11,7 +11,7 @@ const errorHandler = (err, req, res, next) => {
         });
     }
 
-    // Erori Prisma
+    // Gestionare erori Prisma
     if (err.code === 'P2002') {
         return res.status(409).json({
             error: 'Conflict',
@@ -26,7 +26,7 @@ const errorHandler = (err, req, res, next) => {
         });
     }
 
-    // Erori personalizate
+    // Gestionare erori personalizate
     if (err.statusCode) {
         const response = {
             error: err.name || 'Error',
@@ -39,14 +39,14 @@ const errorHandler = (err, req, res, next) => {
         return res.status(err.statusCode).json(response);
     }
 
-    // Eroare generica
+    // Returnare eroare generica
     res.status(500).json({
         error: 'Internal Server Error',
         message: process.env.NODE_ENV === 'development' ? err.message : 'Eroare interna',
     });
 };
 
-// Clasa pentru erori personalizate
+// Definire clasa erori personalizate
 class AppError extends Error {
     constructor(message, statusCode) {
         super(message);

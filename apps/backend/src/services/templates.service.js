@@ -65,7 +65,7 @@ async function create(data) {
 }
 
 async function importJson(jsonData, userId, isBuiltIn = false) {
-    // Validare structura
+    // Validare structura JSON
     const validation = validateJson(jsonData);
     if (!validation.valid) {
         throw new BadRequestError(`Template JSON invalid: ${validation.errors.join(', ')}`);
@@ -81,7 +81,7 @@ async function importJson(jsonData, userId, isBuiltIn = false) {
 
     const { metadata, controls } = jsonData;
 
-    // Creare template si versiune
+    // Creare template si versiune noua
     const template = await prisma.template.create({
         data: {
             name: metadata.name,
@@ -151,7 +151,7 @@ async function importJson(jsonData, userId, isBuiltIn = false) {
 }
 
 async function importOrUpdatePredefinedTemplate(jsonData) {
-    // Validare structura
+    // Validare structura JSON
     const validation = validateJson(jsonData);
     if (!validation.valid) {
         let msg = `Template JSON invalid: ${validation.errors.join(', ')}`;
@@ -163,16 +163,16 @@ async function importOrUpdatePredefinedTemplate(jsonData) {
 
     const { metadata, controls } = jsonData;
 
-    // Cautare template existent
+    // Cautare template existent in baza de date
     const existingTemplate = await prisma.template.findFirst({
         where: { name: metadata.name },
         include: { versions: true }
     });
 
     if (!existingTemplate) {
-        // Nu exista => Import normal (creare nou) ca BuiltIn
+        // Importare normala (creare nou) ca BuiltIn, daca nu exista
         const result = await importJson(jsonData, null, true);
-        // Auto-publish predefined templates
+        // Publicare automata template-uri predefinite
         if (result.template?.id) {
             await publish(result.template.id);
         }
@@ -192,13 +192,13 @@ async function importOrUpdatePredefinedTemplate(jsonData) {
         });
     }
 
-    // Exista => Verificare versiune
+    // Verificare versiune, daca exista deja
     const versionExists = existingTemplate.versions.some(v => v.version === metadata.version);
     if (versionExists) {
         return { message: `Versiunea ${metadata.version} exista deja`, skipped: true };
     }
 
-    // Versiune noua => Adaugare TemplateVersion
+    // Adaugare TemplateVersion daca versiune e noua
     console.log(`Updating template "${metadata.name}" to version ${metadata.version}`);
 
     await prisma.templateVersion.create({
@@ -206,7 +206,7 @@ async function importOrUpdatePredefinedTemplate(jsonData) {
             templateId: existingTemplate.id,
             version: metadata.version,
             changelog: metadata.changelog,
-            isActive: true, // Auto-activate new predefined versions
+            isActive: true, // Activare automata pentru versiuni noi predefinite
             controls: {
                 create: controls.map(control => ({
                     controlId: control.controlId,
@@ -309,7 +309,7 @@ async function exportJson(id) {
     const template = await findById(id);
     const version = template.versions.find(v => v.isActive) || template.versions[0];
 
-    // Permite export chiar si fara versiune - export doar metadate
+    // Permitere export chiar si fara versiune (export doar metadate)
     const controls = version?.controls || [];
 
     return {
@@ -505,7 +505,7 @@ async function deleteTemplate(id) {
     return { message: 'Template sters' };
 }
 
-// Obtinere template-uri predefinite din folderul /templates
+// Preluare template-uri predefinite din folderul /templates
 async function getPredefinedTemplates() {
     // In Docker: /app/templates, local: ../../templates
     let templatesDir = path.join(process.cwd(), 'templates');
@@ -544,7 +544,7 @@ async function getPredefinedTemplates() {
     }
 }
 
-// Obtinere continut template predefinit unic
+// Preluare continut template predefinit unic
 async function getPredefinedTemplateContent(filename) {
     // In Docker: /app/templates, local: ../../templates
     let templatesDir = path.join(process.cwd(), 'templates');
@@ -575,12 +575,12 @@ async function publish(id) {
         throw new NotFoundError('Template nu exista');
     }
 
-    // Daca nu exista nicio versiune, creare una
+    // Verificare daca exista cel putin o versiune
     if (template.versions.length === 0) {
         throw new BadRequestError('Template-ul nu are nicio versiune cu controale');
     }
 
-    // Activare ultima versiune
+    // Activare ultima versiune disponibila
     const latestVersion = template.versions[0];
 
     await prisma.templateVersion.update({

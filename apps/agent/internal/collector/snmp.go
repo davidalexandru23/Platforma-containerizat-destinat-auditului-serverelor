@@ -9,7 +9,7 @@ import (
 	g "github.com/gosnmp/gosnmp"
 )
 
-// OID-uri 
+// Definire OID-uri enterprise private BitTrail
 const (
 	OIDBase           = "1.3.6.1.4.1.99999"
 	OIDCpuPercent     = OIDBase + ".1"  // Gauge32 - CPU % agregat
@@ -30,7 +30,7 @@ const (
 	OIDTrapEnterprise = OIDBase + ".0.1" // Trap metrici
 )
 
-// SNMPSender 
+// Trimitere metrici SNMP
 type SNMPSender struct {
 	target    string // Host backend
 	port      uint16 // Port SNMP trap
@@ -38,7 +38,7 @@ type SNMPSender struct {
 	serverID  string // ID-ul serverului
 }
 
-// NewSNMPSender - initializare sender SNMP
+// Initializare sender SNMP
 func NewSNMPSender(target string, port int, community string, serverID string) *SNMPSender {
 	return &SNMPSender{
 		target:    target,
@@ -48,7 +48,7 @@ func NewSNMPSender(target string, port int, community string, serverID string) *
 	}
 }
 
-// DetailedMetrics - metrici detaliate pentru payload JSON
+// Definire metrici detaliate pentru payload JSON
 type DetailedMetrics struct {
 	CpuPerCore           []float64          `json:"cpuPerCore"`
 	CpuCount             int                `json:"cpuCount"`
@@ -62,9 +62,9 @@ type DetailedMetrics struct {
 	TopProcessesDetailed []ProcessInfo      `json:"topProcessesDetailed"`
 }
 
-//  trimite metrici ca SNMP trap UDP
+// Trimitere metrici ca SNMP trap UDP
 func (s *SNMPSender) SendMetricsTrap(metrics *Metrics, detailed *DetailedMetrics) error {
-	// Configurare conexiune SNMP
+	// Configurare conexiune SNMP trap
 	snmp := &g.GoSNMP{
 		Target:    s.target,
 		Port:      s.port,
@@ -80,7 +80,7 @@ func (s *SNMPSender) SendMetricsTrap(metrics *Metrics, detailed *DetailedMetrics
 	}
 	defer snmp.Conn.Close()
 
-	// Serializare metrici  JSON
+	// Serializare metrici detaliate in JSON
 	detailedJSON, err := json.Marshal(detailed)
 	if err != nil {
 		return fmt.Errorf("eroare serializare metrici detaliate: %w", err)
@@ -113,7 +113,7 @@ func (s *SNMPSender) SendMetricsTrap(metrics *Metrics, detailed *DetailedMetrics
 		},
 	}
 
-	// Trimitere trap SNMPv2c
+	// Trimitere trap SNMPv2c catre backend
 	_, err = snmp.SendTrap(trap)
 	if err != nil {
 		return fmt.Errorf("eroare trimitere trap SNMP: %w", err)

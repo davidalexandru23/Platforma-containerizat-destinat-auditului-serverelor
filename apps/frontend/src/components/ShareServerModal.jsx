@@ -69,11 +69,11 @@ function ShareServerModal({ serverId, onClose }) {
     const isViewer = getSelectedUserRole() === 'VIEWER';
 
     const toggleCapability = (cap) => {
-        if (cap === 'VIEW') return; // Nu permitem debifarea
+        if (cap === 'VIEW') return; // Nu se permite debifarea
 
         // Restrictionare stricta pentru VIEWER
         if (isViewer) {
-            // Un Viewer poate avea DOAR 'VIEW'
+            // Limitare acces Viewer DOAR la 'VIEW'
             return;
         }
 
@@ -81,24 +81,24 @@ function ShareServerModal({ serverId, onClose }) {
             let newCaps = [...prev];
 
             if (newCaps.includes(cap)) {
-                // Debifare
+                // Debifare optiune
                 newCaps = newCaps.filter(c => c !== cap);
 
-                // Daca debifam AUDIT, debifam si MANAGE
+                // Debifare automata AUDIT si MANAGE daca debifam AUDIT
                 if (cap === 'AUDIT' && newCaps.includes('MANAGE')) {
                     newCaps = newCaps.filter(c => c !== 'MANAGE');
                 }
             } else {
-                // Bifare
+                // Bifare optiune
                 newCaps.push(cap);
 
-                // Ierarhie: MANAGE implica AUDIT si VIEW
+                // Respectare ierarhie: MANAGE implica AUDIT si VIEW
                 if (cap === 'MANAGE') {
                     if (!newCaps.includes('AUDIT')) newCaps.push('AUDIT');
                     if (!newCaps.includes('VIEW')) newCaps.push('VIEW');
                 }
 
-                // Ierarhie: AUDIT implica VIEW
+                // Respectare ierarhie: AUDIT implica VIEW
                 if (cap === 'AUDIT') {
                     if (!newCaps.includes('VIEW')) newCaps.push('VIEW');
                 }
@@ -113,7 +113,7 @@ function ShareServerModal({ serverId, onClose }) {
     const existingUserIds = permissions.map(p => p.userId);
     const availableUsers = users.filter(u => !existingUserIds.includes(u.id) && u.role.name !== 'ADMIN');
 
-    // Nu mai este nevoie de const isViewer aici, este definit sus
+    // Variabila isViewer este definita mai sus
 
     return (
         <div className="modal-overlay">
@@ -134,7 +134,7 @@ function ShareServerModal({ serverId, onClose }) {
                                 value={selectedUser}
                                 onChange={(e) => {
                                     setSelectedUser(e.target.value);
-                                    setCapabilities(['VIEW']); // Resetam la default cand schimbam userul
+                                    setCapabilities(['VIEW']); // Resetare la default cand schimbam userul
                                 }}
                                 className="input"
                             >

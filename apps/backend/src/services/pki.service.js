@@ -8,15 +8,15 @@ import { log } from '../lib/logger.js';
 const CERTS_DIR = 'certs';
 const CA_KEY_PATH = path.join(CERTS_DIR, 'ca.key');
 const CA_CERT_PATH = path.join(CERTS_DIR, 'ca.crt');
-const BACKEND_KEY_PATH = path.join(CERTS_DIR, 'backend.key'); // Cheie pentru semnare comenzi
+const BACKEND_KEY_PATH = path.join(CERTS_DIR, 'backend.key'); // Cheie privata pentru semnare comenzi
 const BACKEND_PUB_PATH = path.join(CERTS_DIR, 'backend_pub.key');
 
-// Cache in memorie
+// Stocare cache in memorie
 let caKey = null;
 let caCert = null;
-let backendKey = null; // Cheie privata pentru semnare comenzi
+let backendKey = null; // Cheie privata backend pentru semnare comenzi
 
-// Initializare PKI: Creare CA daca nu exista
+// Initializare PKI: creare CA daca nu exista
 export function initPKI() {
     if (!fs.existsSync(CERTS_DIR)) {
         fs.mkdirSync(CERTS_DIR, { recursive: true });
@@ -33,7 +33,7 @@ export function initPKI() {
         generateCA();
     }
 
-    // Initializare/Incarcare Cheie Semnare Backend
+    // Initializare/Incarcare cheie semnare backend
     if (fs.existsSync(BACKEND_KEY_PATH) && fs.existsSync(BACKEND_PUB_PATH)) {
         log.info('PKI: Loading backend signing key...');
         const keyPem = fs.readFileSync(BACKEND_KEY_PATH, 'utf8');
@@ -94,7 +94,7 @@ export function signCSR(csrPem, commonName) {
     }
 
     const cert = forge.pki.createCertificate();
-    cert.serialNumber = crypto.randomUUID().replace(/-/g, ''); // Serial unic
+    cert.serialNumber = crypto.randomUUID().replace(/-/g, ''); // Generare serial unic
     cert.validity.notBefore = new Date();
     cert.validity.notAfter = new Date();
     cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
@@ -103,7 +103,7 @@ export function signCSR(csrPem, commonName) {
     cert.setSubject(csr.subject.attributes);
     cert.setIssuer(caCert.subject.attributes);
 
-    // Extensii
+    // Adaugare extensii certificat
     cert.setExtensions([{
         name: 'basicConstraints',
         cA: false
@@ -127,7 +127,7 @@ export function signCSR(csrPem, commonName) {
         cert: forge.pki.certificateToPem(cert),
         serial: cert.serialNumber,
         caCert: forge.pki.certificateToPem(caCert),
-        backendPublicKey: fs.readFileSync(BACKEND_PUB_PATH, 'utf8') // Cheie publica backend pentru verificare comenzi de catre agent
+        backendPublicKey: fs.readFileSync(BACKEND_PUB_PATH, 'utf8') // Trimitere cheie publica backend pentru verificare comenzi de catre agent
     };
 }
 

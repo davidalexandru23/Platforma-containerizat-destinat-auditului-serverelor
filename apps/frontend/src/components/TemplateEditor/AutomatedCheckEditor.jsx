@@ -7,7 +7,7 @@ export default function AutomatedCheckEditor({ check, onChange }) {
     const [testServerId, setTestServerId] = useState('');
     const [testResult, setTestResult] = useState(null);
     const [testing, setTesting] = useState(false);
-    // Stare validare comanda
+    // Definire stare validare comanda
     const [cmdValidation, setCmdValidation] = useState({ allowed: true, severity: 'OK', reasons: [] });
     const debounceRef = useRef(null);
 
@@ -79,7 +79,7 @@ export default function AutomatedCheckEditor({ check, onChange }) {
         }
     };
 
-    // Comanda blocata sau respinsa
+    // Afisare eroare comanda blocata sau respinsa
     const isCommandBlocked = !cmdValidation.allowed;
 
     return (

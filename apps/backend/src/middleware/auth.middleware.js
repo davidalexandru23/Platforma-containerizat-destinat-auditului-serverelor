@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 import { UnauthorizedError, ForbiddenError } from './error.middleware.js';
 
-// Middleware autentificare JWT
+// Autentificare JWT
 const authenticate = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -14,7 +14,7 @@ const authenticate = async (req, res, next) => {
         const token = authHeader.substring(7);
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Cautare utilizator in baza de date
+        // Cautare utilizator in baza de date pentru validare
         const user = await prisma.user.findUnique({
             where: { id: decoded.sub },
             include: { role: { select: { id: true, name: true } } },
@@ -41,7 +41,7 @@ const authenticate = async (req, res, next) => {
     }
 };
 
-// Middleware verificare roluri
+// Verificare roluri utilizator
 const authorize = (...roles) => {
     return (req, res, next) => {
         if (!req.user) {
@@ -56,7 +56,7 @@ const authorize = (...roles) => {
     };
 };
 
-// Middleware verificare permisiuni server
+// Verificare permisiuni pe server specific
 const checkServerPermission = (capability) => {
     return async (req, res, next) => {
         try {
@@ -64,12 +64,12 @@ const checkServerPermission = (capability) => {
             const userId = req.user.id;
             const roleName = req.user.role.name;
 
-            // admin are acces la tot
+            // Permitere acces admin la tot
             if (roleName === 'ADMIN') {
                 return next();
             }
 
-            // Verificare permisiune specifica
+            // Verificare permisiune specifica pe server
             const permission = await prisma.permission.findFirst({
                 where: {
                     userId,

@@ -18,7 +18,7 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 )
 
-// DiskInfo - informatii per partitie disc
+// Informatii per partitie disc
 type DiskInfo struct {
 	MountPoint string `json:"mountPoint"`
 	FsType     string `json:"fsType"`
@@ -26,7 +26,7 @@ type DiskInfo struct {
 	TotalBytes uint64 `json:"totalBytes"`
 }
 
-// NetInterfaceInfo - informatii per interfata retea
+// Informatii per interfata retea
 type NetInterfaceInfo struct {
 	Name       string `json:"name"`
 	BytesRecv  uint64 `json:"bytesRecv"`
@@ -36,7 +36,7 @@ type NetInterfaceInfo struct {
 	Errors     uint64 `json:"errors"`
 }
 
-// ProcessInfo - informatii detaliate per proces
+// Informatii detaliate per proces
 type ProcessInfo struct {
 	PID     int32   `json:"pid"`
 	Name    string  `json:"name"`
@@ -82,7 +82,7 @@ func (mc *MetricsCollector) Collect() (*Metrics, error) {
 		m.MemTotalBytes = memInfo.Total
 	}
 
-	// Disc (partitie root)
+	// Colectare disc (partitie root)
 	diskInfo, err := disk.Usage("/")
 	if err == nil {
 		m.DiskUsedBytes = diskInfo.Used
@@ -96,7 +96,7 @@ func (mc *MetricsCollector) Collect() (*Metrics, error) {
 		m.NetOutBytes = netStats[0].BytesSent
 	}
 
-	// Incarcare medie
+	// Colectare incarcare medie
 	loadInfo, err := load.Avg()
 	if err == nil {
 		m.LoadAvg1 = loadInfo.Load1
@@ -104,7 +104,7 @@ func (mc *MetricsCollector) Collect() (*Metrics, error) {
 		m.LoadAvg15 = loadInfo.Load15
 	}
 
-	// Top procese CPU
+	// Colectare top procese CPU
 	procs, err := process.Processes()
 	if err == nil {
 		type procInfo struct {
@@ -121,7 +121,7 @@ func (mc *MetricsCollector) Collect() (*Metrics, error) {
 			}
 		}
 
-		// Sortare dupa CPU (top 5)
+		// Sortare descrescatoare dupa CPU (top 5)
 		for i := 0; i < len(procInfos) && i < 5; i++ {
 			for j := i + 1; j < len(procInfos); j++ {
 				if procInfos[j].cpu > procInfos[i].cpu {
@@ -143,18 +143,18 @@ func (mc *MetricsCollector) Collect() (*Metrics, error) {
 	return m, nil
 }
 
-// CollectDetailed - colectare metrici extinse (per-core, per-disk, per-interfata, swap, procese)
+// Colectare metrici extinse (per-core, per-disk, per-interfata, swap, procese)
 func (mc *MetricsCollector) CollectDetailed() (*DetailedMetrics, error) {
 	d := &DetailedMetrics{}
 
-	// CPU per-core (interval scurt pentru metrici recente)
+	// Colectare CPU per-core (interval scurt pentru metrici recente)
 	perCore, err := cpu.Percent(200*time.Millisecond, true)
 	if err == nil {
 		d.CpuPerCore = perCore
 		d.CpuCount = len(perCore)
 	}
 
-	// Memorie detaliata (available, cached, buffers)
+	// Colectare memorie detaliata (available, cached, buffers)
 	memInfo, err := mem.VirtualMemory()
 	if err == nil {
 		d.MemAvailableBytes = memInfo.Available
@@ -169,7 +169,7 @@ func (mc *MetricsCollector) CollectDetailed() (*DetailedMetrics, error) {
 		d.SwapTotalBytes = swapInfo.Total
 	}
 
-	// Disc - toate partitiile montate
+	// Colectare disc - toate partitiile montate
 	partitions, err := disk.Partitions(false)
 	if err == nil {
 		for _, p := range partitions {
@@ -185,7 +185,7 @@ func (mc *MetricsCollector) CollectDetailed() (*DetailedMetrics, error) {
 		}
 	}
 
-	// Retea - per interfata
+	// Colectare retea - per interfata
 	netStats, err := psnet.IOCounters(true) // true = per interfata
 	if err == nil {
 		for _, iface := range netStats {
@@ -204,7 +204,7 @@ func (mc *MetricsCollector) CollectDetailed() (*DetailedMetrics, error) {
 		}
 	}
 
-	// Top procese detaliate (10)
+	// Colectare top procese detaliate (10)
 	procs, err := process.Processes()
 	if err == nil {
 		type procDetail struct {
@@ -230,7 +230,7 @@ func (mc *MetricsCollector) CollectDetailed() (*DetailedMetrics, error) {
 			if cmdLine == "" {
 				cmdLine = name
 			}
-			// Limitare lungime comanda
+			// Limitare lungime comanda afisata
 			if len(cmdLine) > 100 {
 				cmdLine = cmdLine[:100] + "..."
 			}
@@ -240,7 +240,7 @@ func (mc *MetricsCollector) CollectDetailed() (*DetailedMetrics, error) {
 			}
 		}
 
-		// Sortare dupa CPU (top 10)
+		// Sortare descrescatoare dupa CPU (top 10)
 		for i := 0; i < len(details) && i < 10; i++ {
 			for j := i + 1; j < len(details); j++ {
 				if details[j].cpu > details[i].cpu {
@@ -299,7 +299,7 @@ func (ic *InventoryCollector) Collect() (*Inventory, error) {
 		Users:    []string{},
 	}
 
-	// Info sistem
+	// Colectare info sistem
 	hostInfo, err := host.Info()
 	if err == nil {
 		inv.OsInfo["hostname"] = hostInfo.Hostname
@@ -311,7 +311,7 @@ func (ic *InventoryCollector) Collect() (*Inventory, error) {
 		inv.OsInfo["uptime"] = hostInfo.Uptime
 	}
 
-	// Porturi deschise
+	// Colectare porturi deschise
 	conns, err := psnet.Connections("inet")
 	if err == nil {
 		seen := make(map[uint32]bool)
@@ -327,13 +327,13 @@ func (ic *InventoryCollector) Collect() (*Inventory, error) {
 		}
 	}
 
-	// Utilizatori sistem
+	// Colectare utilizatori sistem
 	inv.Users = getSystemUsers()
 
-	// Pachete instalate
+	// Colectare pachete instalate
 	inv.Packages = getInstalledPackages()
 
-	// Servicii active
+	// Colectare servicii active
 	inv.Services = getActiveServices()
 
 	return inv, nil
@@ -361,7 +361,7 @@ func getSystemUsers() []string {
 func getInstalledPackages() []string {
 	var packages []string
 
-	// Incearca dpkg (Debian/Ubuntu)
+	// Incercare dpkg (Debian/Ubuntu)
 	cmd := exec.Command("dpkg-query", "-W", "-f=${Package}\n")
 	output, err := cmd.Output()
 	if err == nil {
@@ -374,7 +374,7 @@ func getInstalledPackages() []string {
 		return packages
 	}
 
-	// Incearca rpm (RHEL/CentOS)
+	// Incercare rpm (RHEL/CentOS)
 	cmd = exec.Command("rpm", "-qa", "--qf", "%{NAME}\n")
 	output, err = cmd.Output()
 	if err == nil {

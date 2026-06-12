@@ -53,8 +53,8 @@ type PendingCheck struct {
 	Normalize        []string `json:"normalize"`
 	OnFailMessage    string   `json:"onFailMessage"`
 	PlatformScope    []string `json:"platformScope"`
-	Signature        string   `json:"signature"` // Semnatura verificare comanda
-	// Camp??uri pentru verificari de container
+	Signature        string   `json:"signature"` // Semnatura verificare comanda de la backend
+	// Campuri pentru verificari de container
 	TargetScope string `json:"targetScope"`  // HOST | CONTAINER
 	ContainerID string `json:"containerId"`  // ID nativ docker/podman
 	Runtime     string `json:"runtime"`      // docker | podman
@@ -91,13 +91,13 @@ type CheckResult struct {
 	Output           string `json:"output"`
 	ErrorMessage     string `json:"errorMessage,omitempty"`
 
-	// Campuri Lant Custodie
+	// Campuri Chain of Custody (lant custodie)
 	OutputHash    string `json:"outputHash"`
 	ExecTimestamp string `json:"execTimestamp"`
 	ExecHostname  string `json:"execHostname"`
 	ExecUser      string `json:"execUser"`
 	ExitCode      int    `json:"exitCode"`
-	Signature     string `json:"signature"` // Semnatura agent pe rezultat
+	Signature     string `json:"signature"` // Semnatura digitala agent pe rezultat
 }
 
 func (c *Client) SendCheckResults(auditRunID string, results []CheckResult) error {
@@ -107,7 +107,7 @@ func (c *Client) SendCheckResults(auditRunID string, results []CheckResult) erro
 	return c.post(fmt.Sprintf("/api/agent/%s/audit/%s/results", c.serverID, auditRunID), payload)
 }
 
-// SendContainerInventory trimite inventarul containerelor descoperite la backend.
+// Trimitere inventar containere descoperite la backend.
 func (c *Client) SendContainerInventory(containers interface{}) error {
 	payload := map[string]interface{}{
 		"containers": containers,

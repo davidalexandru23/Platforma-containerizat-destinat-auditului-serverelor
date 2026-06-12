@@ -1,6 +1,6 @@
 import rateLimit from 'express-rate-limit';
 
-// Limitare rata pentru autentificare
+// Limitare rata pentru autentificare (login/register)
 const authLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minut
     max: 10, // 10 cereri pe minut
@@ -12,7 +12,7 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-// Limitare rata pentru agent
+// Limitare rata pentru endpoint-uri agent
 const agentLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 60, // 1/sec pentru metrici
@@ -21,12 +21,12 @@ const agentLimiter = rateLimit({
         message: 'Rate limit depasit',
     },
     keyGenerator: (req) => {
-        // Cheie bazata pe token agent
+        // Generare cheie bazata pe token agent
         return req.headers['x-agent-token'] || req.ip;
     },
 });
 
-// Limitare rata generala
+// Limitare rata generala API
 const generalLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 100,

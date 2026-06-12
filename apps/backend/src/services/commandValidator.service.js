@@ -1,16 +1,16 @@
-// Serviciu validare comenzi custom din template-uri
-// Previne executia de comenzi distructive pe serverele auditate
+// Validare comenzi custom din template-uri de audit
+// Prevenire executie comenzi distructive pe serverele auditate
 
 import { log } from '../lib/logger.js';
 
-// Nivel 1: Blacklist - comenzi blocate definitiv, nimeni nu le poate aproba
+// Definire Nivel 1: Blacklist - comenzi blocate definitiv, nimeni nu le poate aproba
 const DANGEROUS_COMMANDS = [
-    // Stergere fisiere/directoare
+    // Definire reguli stergere fisiere/directoare
     { pattern: /\brm\s+(-[a-zA-Z]*\s+)*/, label: 'rm (stergere fisiere)' },
     { pattern: /\brmdir\b/, label: 'rmdir (stergere directoare)' },
     { pattern: /\bunlink\b/, label: 'unlink (stergere fisier)' },
 
-    // Formatare/Scriere disc
+    // Definire reguli formatare/scriere disc
     { pattern: /\bdd\s+/, label: 'dd (scriere disc bruta)' },
     { pattern: /\bmkfs\b/, label: 'mkfs (formatare disc)' },
     { pattern: /\bfdisk\b/, label: 'fdisk (partitionare disc)' },
@@ -18,15 +18,15 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\bwipefs\b/, label: 'wipefs (stergere semnatura disc)' },
     { pattern: /\bshred\b/, label: 'shred (distrugere fisier)' },
 
-    // Oprire/Repornire sistem
-    // Oprire/Repornire sistem (sa nu faca match pe reboot-required sau shutdown-hook)
+    // Definire reguli oprire/repornire sistem
+    // Detectare oprire/repornire sistem (sa nu faca match pe reboot-required sau shutdown-hook)
     { pattern: /(?<!-)\bshutdown\b(?!-)/, label: 'shutdown (oprire sistem)' },
     { pattern: /(?<!-)\breboot\b(?!-)/, label: 'reboot (repornire sistem)' },
     { pattern: /(?<!-)\bpoweroff\b(?!-)/, label: 'poweroff (oprire sistem)' },
     { pattern: /(?<!-)\bhalt\b(?!-)/, label: 'halt (oprire sistem)' },
     { pattern: /(?<!-)\binit\s+[0-6]\b/, label: 'init (schimbare runlevel)' },
 
-    // Modificare utilizatori/grupuri
+    // Definire reguli modificare utilizatori/grupuri
     { pattern: /\buseradd\b/, label: 'useradd (creare utilizator)' },
     { pattern: /\buserdel\b/, label: 'userdel (stergere utilizator)' },
     { pattern: /\busermod\b/, label: 'usermod (modificare utilizator)' },
@@ -34,12 +34,12 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\bgroupadd\b/, label: 'groupadd (creare grup)' },
     { pattern: /\bgroupdel\b/, label: 'groupdel (stergere grup)' },
 
-    // Modificare permisiuni
+    // Definire reguli modificare permisiuni
     { pattern: /\bchmod\b/, label: 'chmod (modificare permisiuni)' },
     { pattern: /\bchown\b/, label: 'chown (modificare proprietar)' },
     { pattern: /\bchgrp\b/, label: 'chgrp (modificare grup)' },
 
-    // Gestiune pachete - install/remove/purge
+    // Definire reguli gestiune pachete - install/remove/purge
     { pattern: /\bapt\s+(install|remove|purge|autoremove)\b/, label: 'apt install/remove' },
     { pattern: /\bapt-get\s+(install|remove|purge|autoremove)\b/, label: 'apt-get install/remove' },
     { pattern: /\byum\s+(install|remove|erase|update)\b/, label: 'yum install/remove' },
@@ -47,16 +47,16 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\bpip3?\s+install\b/, label: 'pip install' },
     { pattern: /\bnpm\s+install\b/, label: 'npm install' },
 
-    // Descarcare + executie (pipe catre shell)
+    // Definire reguli descarcare + executie (pipe catre shell)
     { pattern: /\bcurl\b.*\|\s*(ba)?sh\b/, label: 'curl | sh (executie remota)' },
     { pattern: /\bwget\b.*\|\s*(ba)?sh\b/, label: 'wget | sh (executie remota)' },
 
-    // Comenzi periculoase generice
+    // Definire reguli comenzi periculoase generice
     { pattern: /:\(\)\s*\{.*\|.*&\s*\}\s*;?\s*:/, label: 'fork bomb' },
     { pattern: /\beval\s+/, label: 'eval (executie cod dinamic)' },
     { pattern: /\bexec\s+/, label: 'exec (inlocuire proces)' },
 
-    // Servicii - start/stop/restart/enable/disable
+    // Definire reguli servicii - start/stop/restart/enable/disable
     { pattern: /\bsystemctl\s+(start|stop|restart|enable|disable|mask)\b/, label: 'systemctl modificare serviciu' },
     { pattern: /\bservice\s+\S+\s+(start|stop|restart)\b/, label: 'service start/stop/restart' },
 
@@ -74,7 +74,7 @@ const DANGEROUS_COMMANDS = [
     { pattern: /\bcrontab\s+-(e|r)\b/, label: 'crontab -e/-r (modificare cron)' },
 ];
 
-// Nivel 2: Operatori periculosi - detectie comportament suspect
+// Definire Nivel 2: Operatori periculosi - detectie comportament suspect
 const DANGEROUS_OPERATORS = [
     { pattern: /(?<![2&])\s>\s*(?!\/dev\/null)(?![0-9])\S/, reason: 'Redirectare output catre fisier' },
     { pattern: />>/, reason: 'Append catre fisier' },
@@ -100,7 +100,7 @@ export function validateCommand(command) {
 
     const cmd = command.trim();
 
-    // Nivel 1: Blacklist - blocare definitiva
+    // Verificare Nivel 1: Blacklist - blocare definitiva
     for (const { pattern, label } of DANGEROUS_COMMANDS) {
         if (pattern.test(cmd)) {
             log.warn(`[COMMAND_VALIDATOR] Comanda BLOCATA: "${cmd}" - motiv: ${label}`);
@@ -112,7 +112,7 @@ export function validateCommand(command) {
         }
     }
 
-    // Nivel 2: Operatori periculosi
+    // Verificare Nivel 2: Operatori periculosi
     const reasons = [];
     for (const { pattern, reason } of DANGEROUS_OPERATORS) {
         if (pattern.test(cmd)) {
@@ -149,7 +149,7 @@ export function validateAllCommands(controls) {
 
         if (Array.isArray(control.automatedChecks)) {
             control.automatedChecks.forEach((check, j) => {
-                // Validare camp command
+                // Validare camp command din check
                 if (check.command) {
                     const result = validateCommand(check.command);
                     if (!result.allowed) {
@@ -163,7 +163,7 @@ export function validateAllCommands(controls) {
                     }
                 }
 
-                // Validare camp script
+                // Validare camp script din check
                 if (check.script) {
                     const result = validateCommand(check.script);
                     if (!result.allowed) {

@@ -17,7 +17,7 @@ async function seedTemplates() {
 
         for (const pt of predefinedTemplates) {
             try {
-                // Import sau Update (verificare versiune)
+                // Importare sau actualizare (verificare versiune)
                 const content = await templatesService.getPredefinedTemplateContent(pt.filename);
                 const result = await templatesService.importOrUpdatePredefinedTemplate(content);
 

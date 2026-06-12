@@ -68,7 +68,7 @@ func (ar *AuditRunner) CheckAndRun() error {
 	resultsByRun := make(map[string][]api.CheckResult)
 
 	for _, check := range checks {
-		// 1. Verificare semnatura (daca exista cheie backend)
+		// Verificare semnatura (daca exista cheie backend)
 		if len(ar.backendKey) > 0 && check.Signature != "" {
 			verifyData := check.Command + check.CheckID
 			if err := crypto.VerifySignature(ar.backendKey, []byte(verifyData), check.Signature); err != nil {
@@ -82,12 +82,12 @@ func (ar *AuditRunner) CheckAndRun() error {
 			}
 		}
 
-		// 2. Executare
+		// Executare verificare
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		output, exitCode, err := ar.executeCheck(ctx, check)
 		cancel()
 
-		// 3. Metadate Chain of Custody
+		// Populare metadate Chain of Custody
 		hostname, _ := os.Hostname()
 		currentUser, _ := user.Current()
 		username := "unknown"
@@ -96,7 +96,7 @@ func (ar *AuditRunner) CheckAndRun() error {
 		}
 		timestamp := time.Now().Format(time.RFC3339)
 
-		// 4. Redactare
+		// Redactare secrete din output
 		redactedOutput := crypto.RedactSecrets(output)
 		outputHash := crypto.CalculateHash(redactedOutput)
 
@@ -104,7 +104,7 @@ func (ar *AuditRunner) CheckAndRun() error {
 			AutomatedCheckID: check.AutomatedCheckID,
 			Status:           "FAIL",
 			Output:           redactedOutput,
-			// Campuri CoC
+			// Campuri Chain of Custody
 			OutputHash:    outputHash,
 			ExecTimestamp: timestamp,
 			ExecHostname:  hostname,
@@ -119,22 +119,22 @@ func (ar *AuditRunner) CheckAndRun() error {
 				result.ErrorMessage = "Timeout (30s)"
 			}
 		} else {
-			// Succes (exit code 0 sau gestionat)
+			// Evaluare succes (exit code 0 sau gestionat)
 			if check.ExpectedResult != "" {
 				if matchesExpected(redactedOutput, check) {
 					result.Status = "PASS"
 				}
 			} else {
-				// Fara asteptari, PASS daca exit code 0
+				// Returnare PASS daca exit code 0 (fara valoare asteptata)
 				if exitCode == 0 {
 					result.Status = "PASS"
 				}
 			}
 		}
 
-		// 5. Semnare rezultat
+		// Semnare rezultat
 		if ar.privateKey != nil {
-			// Semnare: OutputHash + Status + Timestamp
+			// Construire payload semnatura: OutputHash + Status + Timestamp
 			signData := result.OutputHash + result.Status + result.ExecTimestamp
 			sig, err := crypto.SignData(ar.privateKey, []byte(signData))
 			if err == nil {
@@ -147,7 +147,7 @@ func (ar *AuditRunner) CheckAndRun() error {
 		resultsByRun[check.AuditRunID] = append(resultsByRun[check.AuditRunID], result)
 	}
 
-	// Trimitere rezultate
+	// Trimitere rezultate grupate catre backend
 	for runID, results := range resultsByRun {
 		if err := ar.client.SendCheckResults(runID, results); err != nil {
 			log.Printf("Failed to send results for run %s: %v", runID, err)
@@ -170,8 +170,8 @@ func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck)
 		return "", -1, fmt.Errorf("comanda blocata de agent: %s", reason)
 	}
 
-	// Handling special: CONTAINER_DISCOVERY trigger
-	// Aceasta comanda speciala determina agentul sa ruleze container discovery acum.
+	// Gestionare speciala: CONTAINER_DISCOVERY trigger
+	// Determinare agent sa ruleze container discovery
 	if check.CheckType == "CONTAINER_DISCOVERY" {
 		return "CONTAINER_DISCOVERY_TRIGGER", 0, nil
 	}
@@ -181,9 +181,9 @@ func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck)
 	if check.CheckType == "SCRIPT" {
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", check.Script)
 	} else {
-		// COMMAND, CONTAINER_EXEC, si orice alt tip — toti se executa ca shell commands
-		// Pentru comenzile CONTAINER: command-ul a fost deja interpolat cu CONTAINER_ID si RUNTIME
-		// de catre backend (ex: "docker inspect <id>")
+		// Executare COMMAND, CONTAINER_EXEC si orice alt tip ca shell commands
+		// Interpolare prealabila a CONTAINER_ID si RUNTIME de catre backend
+		// (ex: "docker inspect <id>")
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", check.Command)
 	}
 
@@ -201,7 +201,7 @@ func (ar *AuditRunner) executeCheck(ctx context.Context, check api.PendingCheck)
 	return string(output), exitCode, err
 }
 
-// Blacklist minimal pe agent
+// Definire blacklist minimal pe agent
 var dangerousPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\brm\s+(-[a-zA-Z]*[rf][a-zA-Z]*\s+)*\/`),
 	regexp.MustCompile(`\bdd\s+`),
@@ -219,7 +219,7 @@ var dangerousPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\bexec\s+`),
 }
 
-// isCommandSafe verifica daca comanda e sigura pentru executie
+// Verificare siguranta comanda pentru executie
 func isCommandSafe(command string) (bool, string) {
 	cmd := strings.TrimSpace(command)
 	if cmd == "" {
@@ -233,13 +233,13 @@ func isCommandSafe(command string) (bool, string) {
 	return true, ""
 }
 
-// matchesExpected verifica output conform criteriu
+// Verificare output conform criteriu asteptat
 func matchesExpected(output string, check api.PendingCheck) bool {
-	// 1. Normalizare
+	// Normalizare output
 	output = normalizeOutput(output, check.Normalize)
 	expected := check.ExpectedResult
 
-	// 2. Parsare (basic)
+	// Parsare output (basic)
 	if check.Parser == "FIRST_LINE" {
 		lines := strings.Split(output, "\n")
 		if len(lines) > 0 {
@@ -247,7 +247,7 @@ func matchesExpected(output string, check api.PendingCheck) bool {
 		}
 	}
 
-	// 3. Comparatie
+	// Comparare output cu valoare asteptata
 	comparison := strings.ToUpper(check.Comparison)
 	if comparison == "" {
 		comparison = "EQUALS"

@@ -34,7 +34,7 @@ async function calculateScoring(auditRunId) {
         t => !excludedIds.includes(t.manualCheck.control.controlId)
     );
 
-    // Calcul automat
+    // Calculare conformitate automata
     const totalAutomated = activeCheckResults.length;
     const passedAutomated = activeCheckResults.filter(r => r.status === 'PASS').length;
     const failedAutomated = activeCheckResults.filter(r => r.status === 'FAIL').length;
@@ -46,7 +46,7 @@ async function calculateScoring(auditRunId) {
         ? (passedAutomated / totalAutomated) * 100
         : 100;
 
-    // Calcul manual
+    // Calculare conformitate manuala
     const totalManual = activeManualTasks.length;
     const completedManual = activeManualTasks.filter(t => t.status === 'COMPLETED').length;
     const rejectedManual = activeManualTasks.filter(t => t.status === 'REJECTED').length;
@@ -54,27 +54,27 @@ async function calculateScoring(auditRunId) {
         t => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
     ).length;
 
-    // manualCompletionPercent = task-uri finalizate cu succes din total
+    // Calculare procent task-uri finalizate cu succes din total
     const manualCompletionPercent = totalManual > 0
         ? ((completedManual) / totalManual) * 100
         : 100;
 
-    // Determinare status general
+    // Determinare status general conformitate
     let overallStatus = 'COMPLIANT';
 
-    // Regula: Esec critic suprascrie tot
+    // Regula: esec critic suprascrie tot
     if (criticalFails > 0) {
         overallStatus = 'NON_COMPLIANT';
     }
-    // Regula: Manual in asteptare blocheaza conformitatea
+    // Regula: manual in asteptare blocheaza conformitatea
     else if (pendingManual > 0) {
         overallStatus = 'PARTIALLY_COMPLIANT';
     }
-    // Regula: Task-uri manuale respinse
+    // Regula: task-uri manuale respinse
     else if (rejectedManual > 0) {
         overallStatus = manualCompletionPercent < 80 ? 'NON_COMPLIANT' : 'PARTIALLY_COMPLIANT';
     }
-    // Alte esecuri automate
+    // Verificare alte esecuri automate
     else if (failedAutomated > 0) {
         if (automatedCompliancePercent >= 80) {
             overallStatus = 'PARTIALLY_COMPLIANT';

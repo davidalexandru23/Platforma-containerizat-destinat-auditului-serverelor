@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// ContainerInfo reprezinta un container descoperit pe gazda.
+// Reprezentare container descoperit pe gazda.
 type ContainerInfo struct {
 	ContainerID    string            `json:"containerId"`
 	Runtime        string            `json:"runtime"` // docker | podman
@@ -53,7 +53,7 @@ type ContainerMount struct {
 	RW          bool   `json:"rw"`
 }
 
-// dockerPsEntry reprezinta o intrare din output-ul `docker ps --format json`.
+// Reprezentare intrare din output-ul `docker ps --format json`.
 type dockerPsEntry struct {
 	ID      string `json:"ID"`
 	Image   string `json:"Image"`
@@ -64,13 +64,13 @@ type dockerPsEntry struct {
 	Ports   string `json:"Ports"`
 }
 
-// detectRuntime cauta docker sau podman in PATH.
-// Returneaza lista of runtimes detectate.
+// Detectare docker sau podman in PATH.
+// Returnare lista de runtimes disponibile.
 func detectRuntime() []string {
 	var runtimes []string
 	for _, rt := range []string{"docker", "podman"} {
 		if _, err := exec.LookPath(rt); err == nil {
-			// Verifica ca daemonul este pornit (ping rapid)
+			// Verificare daemon pornit (ping rapid)
 			cmd := exec.Command(rt, "info", "--format", "{{.ID}}")
 			cmd.Stdout = nil
 			cmd.Stderr = nil
@@ -82,7 +82,7 @@ func detectRuntime() []string {
 	return runtimes
 }
 
-// listContainerIDs returneaza lista de ID-uri de containere (toate, inclusiv oprite).
+// Returnare lista de ID-uri de containere (toate, inclusiv oprite).
 func listContainerIDs(runtime string) ([]string, error) {
 	cmd := exec.Command(runtime, "ps", "-a", "--format", "{{.ID}}")
 	out, err := cmd.Output()
@@ -99,7 +99,7 @@ func listContainerIDs(runtime string) ([]string, error) {
 	return ids, nil
 }
 
-// inspectContainer ruleaza `docker inspect <id>` si parseza primul element.
+// Executare `docker inspect <id>` si parsare prim element.
 func inspectContainer(runtime, containerID string) (map[string]interface{}, error) {
 	cmd := exec.Command(runtime, "inspect", containerID)
 	var buf bytes.Buffer
@@ -119,7 +119,7 @@ func inspectContainer(runtime, containerID string) (map[string]interface{}, erro
 	return result[0], nil
 }
 
-// parseInspect transforma output-ul brut al inspect intr-un ContainerInfo.
+// Transformare output brut inspect intr-un ContainerInfo.
 func parseInspect(runtime string, raw map[string]interface{}) ContainerInfo {
 	ci := ContainerInfo{
 		Runtime:    runtime,
@@ -138,14 +138,14 @@ func parseInspect(runtime string, raw map[string]interface{}) ContainerInfo {
 	// Config
 	if config, ok := raw["Config"].(map[string]interface{}); ok {
 		ci.Image = safeString(config, "Image")
-		// ENV count (fara valori)
+		// Numararare variabile ENV (fara valori)
 		if envs, ok := config["Env"].([]interface{}); ok {
 			ci.EnvVarCount = len(envs)
 		}
 		ci.RunningAsUser = safeString(config, "User")
 		ci.Labels = parseLabels(config["Labels"])
 
-		// Healthcheck
+		// Verificare Healthcheck
 		if hc, ok := config["Healthcheck"].(map[string]interface{}); ok {
 			if test, ok := hc["Test"].([]interface{}); ok {
 				if len(test) > 0 {
@@ -156,7 +156,7 @@ func parseInspect(runtime string, raw map[string]interface{}) ContainerInfo {
 		}
 	}
 
-	// Image tag parsing
+	// Parsare tag imagine
 	if parts := strings.SplitN(ci.Image, ":", 2); len(parts) == 2 {
 		ci.ImageTag = parts[1]
 	}
@@ -192,7 +192,7 @@ func parseInspect(runtime string, raw map[string]interface{}) ContainerInfo {
 			}
 		}
 
-		// SecurityOpt — seccomp si apparmor
+		// Parsare SecurityOpt - seccomp si apparmor
 		if securityOpts, ok := hc["SecurityOpt"].([]interface{}); ok {
 			for _, opt := range securityOpts {
 				s := fmt.Sprintf("%v", opt)
@@ -206,7 +206,7 @@ func parseInspect(runtime string, raw map[string]interface{}) ContainerInfo {
 		}
 	}
 
-	// RunningAsRoot logic
+	// Determinare RunningAsRoot
 	user := strings.TrimSpace(ci.RunningAsUser)
 	ci.RunningAsRoot = user == "" || user == "0" || user == "root"
 
@@ -255,11 +255,11 @@ func parseInspect(runtime string, raw map[string]interface{}) ContainerInfo {
 	return ci
 }
 
-// DiscoverContainers detecteaza rultime-urile disponibile si returneaza lista containerelor.
+// Detectare runtimes disponibile si returnare lista containere.
 func DiscoverContainers() ([]ContainerInfo, error) {
 	runtimes := detectRuntime()
 	if len(runtimes) == 0 {
-		return nil, nil // Niciun runtime detectat — nu e eroare
+		return nil, nil // Niciun runtime detectat - nu e eroare
 	}
 
 	var all []ContainerInfo
@@ -290,7 +290,7 @@ func DiscoverContainers() ([]ContainerInfo, error) {
 	return all, nil
 }
 
-// DiscoverContainersWithTimeout ruleaza DiscoverContainers cu timeout.
+// Executare DiscoverContainers cu timeout.
 func DiscoverContainersWithTimeout(timeout time.Duration) ([]ContainerInfo, error) {
 	type result struct {
 		containers []ContainerInfo
@@ -309,7 +309,7 @@ func DiscoverContainersWithTimeout(timeout time.Duration) ([]ContainerInfo, erro
 	}
 }
 
-// Utilitare de parsare sigura a map-urilor JSON
+// Utilitare parsare sigura a map-urilor JSON
 
 func safeString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok && v != nil {

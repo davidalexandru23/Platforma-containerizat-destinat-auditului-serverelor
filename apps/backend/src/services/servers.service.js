@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ForbiddenError } from '../middleware/error.middleware.js';
 
 async function findAll(userId, userRole) {
-    // Admin vede tot
+    // Returnare toate serverele pentru admin
     if (userRole === 'ADMIN') {
         return prisma.server.findMany({
             include: {
@@ -14,7 +14,7 @@ async function findAll(userId, userRole) {
         });
     }
 
-    // Altii vad doar serverele cu permisiuni
+    // Returnare doar servere cu permisiuni pentru alti utilizatori
     const permissions = await prisma.permission.findMany({
         where: {
             userId,
@@ -48,7 +48,7 @@ async function findById(id, userId, userRole) {
         throw new NotFoundError('Server nu exista');
     }
 
-    // Verificare acces
+    // Verificare permisiuni acces
     if (userRole !== 'ADMIN') {
         const hasAccess = await checkAccess(userId, id);
         if (!hasAccess) {
@@ -69,7 +69,7 @@ async function create(data, userId) {
         },
     });
 
-    // Generare token inrolare
+    // Generare token de inrolare
     const enrollToken = uuidv4();
     await prisma.agentIdentity.upsert({
         where: { serverId: server.id },
@@ -77,7 +77,7 @@ async function create(data, userId) {
         update: { enrollToken, agentToken: null },
     });
 
-    // Daca avem userId (creator), ii dam permisiuni complete automat
+    // Acordare automata permisiuni complete daca exista userId (creator)
     if (userId) {
         await prisma.permission.create({
             data: {
@@ -98,7 +98,7 @@ async function update(id, data) {
         throw new NotFoundError('Server nu exista');
     }
 
-    // Whitelist campuri permise - previne mass-assignment
+    // Filtrare campuri permise (prevenire mass-assignment)
     const { name, hostname, ipAddress, description } = data;
 
     return prisma.server.update({
@@ -144,7 +144,7 @@ async function generateEnrollToken(id) {
     };
 }
 
-// Returnare token inrolare existent fara regenerare
+// Preluare token inrolare existent fara regenerare
 async function getEnrollToken(id) {
     const server = await prisma.server.findUnique({
         where: { id },
@@ -259,10 +259,10 @@ async function checkOfflineServers() {
         });
         updatedCount++;
 
-        // Difuzare schimbare status
+        // Difuzare schimbare status server
         notificationService.broadcastServerStatus(identity.serverId, 'OFFLINE', new Date(), identity.server.riskLevel);
 
-        // Difuzare eveniment flux activitate
+        // Difuzare eveniment catre flux activitate
         notificationService.broadcastActivity(
             'System',
             'SERVER_OFFLINE',

@@ -11,7 +11,7 @@ function Layout() {
     const navigate = useNavigate();
     const [toasts, setToasts] = useState([]);
 
-    // === Logica Notificari WebSocket ===
+    // === Definire logica Notificari WebSocket ===
     useEffect(() => {
         if (!user) return;
 
@@ -62,7 +62,7 @@ function Layout() {
         return 'info';
     };
 
-    // === Logica Autentificare ===
+    // === Definire logica Autentificare ===
     const handleLogout = () => {
         logout();
         navigate('/login');

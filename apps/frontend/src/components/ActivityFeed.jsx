@@ -29,7 +29,7 @@ function ActivityFeed() {
                 id: Date.now() + Math.random(),
                 ...data
             };
-            setActivities(prev => [newActivity, ...prev].slice(0, 50)); // Pastreaza ultimele 50
+            setActivities(prev => [newActivity, ...prev].slice(0, 50)); // Pastrare ultimele 50
         });
 
         return () => {

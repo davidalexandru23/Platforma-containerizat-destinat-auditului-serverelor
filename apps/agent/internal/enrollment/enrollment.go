@@ -19,27 +19,27 @@ type enrollRequest struct {
 	EnrollToken string `json:"enrollToken"`
 	Version     string `json:"version"`
 	OsInfo      string `json:"osInfo"`
-	Csr         string `json:"csr"` // CSR adaugat
+	Csr         string `json:"csr"` // Cerere semnare certificat
 }
 
 type enrollResponse struct {
 	AgentToken       string `json:"agentToken"`
 	ServerID         string `json:"serverId"`
 	ServerName       string `json:"serverName"`
-	Certificate      string `json:"certificate"`      // Certificat primit
-	BackendPublicKey string `json:"backendPublicKey"` // Cheie backend primita
+	Certificate      string `json:"certificate"`      // Certificat semnat primit
+	BackendPublicKey string `json:"backendPublicKey"` // Cheie publica backend primita
 	Message          string `json:"message"`
 }
 
 func Enroll(serverURL, token, configPath, version string) error {
-	// 1. Generare pereche chei
+	// Generare pereche chei RSA
 	fmt.Println("[PKI] Generating RSA Key Pair...")
 	privKey, err := crypto.GenerateKeyPair()
 	if err != nil {
 		return fmt.Errorf("failed to generate key pair: %w", err)
 	}
 
-	// 2. Generare CSR
+	// Generare CSR (cerere semnare certificat)
 	hostname, _ := os.Hostname()
 	fmt.Println("[PKI] Generating Certificate Signing Request (CSR)...")
 	csrBytes, err := crypto.GenerateCSR(privKey, hostname)
@@ -63,7 +63,7 @@ func Enroll(serverURL, token, configPath, version string) error {
 
 	fmt.Printf("Conectare la %s...\n", serverURL)
 
-	// trimite request enrollment
+	// Trimitere request enrollment catre backend
 	resp, err := http.Post(
 		serverURL+"/api/agent/enroll",
 		"application/json",
@@ -88,7 +88,7 @@ func Enroll(serverURL, token, configPath, version string) error {
 		return fmt.Errorf("eroare la parsare raspuns: %w", err)
 	}
 
-	// salveaza configurare
+	// Salvare configurare agent
 	cfg := &config.Config{
 		ServerID:           result.ServerID,
 		ServerURL:          serverURL,
@@ -101,33 +101,33 @@ func Enroll(serverURL, token, configPath, version string) error {
 		BackendKeyFile:     filepath.Join(filepath.Dir(configPath), "certs", "backend.pub"),
 	}
 
-	// Creare director lipsa
+	// Creare directoare lipsa
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("eroare la crearea directorului %s: %w", dir, err)
 	}
 
-	// Asigurare director certificate
+	// Asigurare existenta director certificate
 	certDir := filepath.Join(dir, "certs")
 	if err := os.MkdirAll(certDir, 0755); err != nil {
 		return fmt.Errorf("failed to create certs dir: %w", err)
 	}
 
-	// Salvare chei si certificate
+	// Salvare chei si certificate pe disc
 	fmt.Println("[PKI] Saving certificates and keys...")
 
-	// Salvare cheie privata
+	// Salvare cheie privata agent
 	privKeyBytes := x509.MarshalPKCS1PrivateKey(privKey)
 	if err := crypto.SavePEM(cfg.KeyFile, "RSA PRIVATE KEY", privKeyBytes); err != nil {
 		return fmt.Errorf("failed to save private key: %w", err)
 	}
 
-	// Salvare certificat
+	// Salvare certificat semnat de CA
 	if err := crypto.SaveFile(cfg.CertFile, []byte(result.Certificate)); err != nil {
 		return fmt.Errorf("failed to save certificate: %w", err)
 	}
 
-	// Salvare cheie publica backend
+	// Salvare cheie publica backend pentru verificare comenzi
 	if err := crypto.SaveFile(cfg.BackendKeyFile, []byte(result.BackendPublicKey)); err != nil {
 		return fmt.Errorf("failed to save backend key: %w", err)
 	}
@@ -136,7 +136,7 @@ func Enroll(serverURL, token, configPath, version string) error {
 		return fmt.Errorf("eroare la salvarea configurarii: %w", err)
 	}
 
-	// Verificare
+	// Verificare validitate certificat primit
 	block, _ := pem.Decode([]byte(result.Certificate))
 	if block == nil {
 		fmt.Println("[WARNING] Received invalid certificate PEM")
